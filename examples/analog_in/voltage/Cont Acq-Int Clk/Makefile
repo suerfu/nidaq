@@ -35,7 +35,7 @@ LDFLAGS += -arch i386 -arch x86_64
 endif
 
 all: $(TARGET)
-
+ 
 clean:
 	rm -f $(OBJS) $(TARGET) core
 
