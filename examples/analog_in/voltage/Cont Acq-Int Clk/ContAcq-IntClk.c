@@ -90,6 +90,7 @@ Error:
 	return 0;
 }
 
+
 int32 CVICALLBACK EveryNCallback(TaskHandle taskHandle, int32 everyNsamplesEventType, uInt32 nSamples, void *callbackData)
 {
 	int32       error=0;
@@ -104,6 +105,7 @@ int32 CVICALLBACK EveryNCallback(TaskHandle taskHandle, int32 everyNsamplesEvent
 	DAQmxErrChk (DAQmxReadAnalogF64(taskHandle,1000,10.0,DAQmx_Val_GroupByScanNumber,data,1000,&read,NULL));
 	if( read>0 ) {
 		printf("Acquired %d samples. Total %d\r",(int)read,(int)(totalRead+=read));
+		printf("0th sample: %f\n", data[0]);
 		fflush(stdout);
 	}
 
