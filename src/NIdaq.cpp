@@ -87,6 +87,7 @@ void NIdaq::Configure(){
     Vmax = cparser->GetFloat("/module/"+GetModuleName()+"/Vmax", 10);
     
     DAQmxCreateAIVoltageChan( task, chan.c_str(), "", DAQmx_Val_Cfg_Default, Vmin, Vmax, DAQmx_Val_Volts, NULL);
+    //DAQmxCreateAIVoltageChan( task, chan.c_str(), "", DAQmx_Val_PseudoDiff, Vmin, Vmax, DAQmx_Val_Volts, NULL);
 
 
     // Configure sampling clock.
@@ -116,6 +117,17 @@ void NIdaq::Configure(){
     int id = ctrl->GetIDByName( this->GetModuleName() );
     for( int i=0; i<buff_depth; ++i ){
         PushToBuffer( id, new NIDAQdata( nchan, useI16, buff_size, sample_freq, group) );
+    }
+
+    for( unsigned int i=0; i<nchan; i++){
+        float64 cal_coeff[8] = {0,0,0,0,0,0,0,0};
+        stringstream ss;
+        ss << "Dev1/ai" << i;
+        DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), cal_coeff, 8 );
+        for( int j=0; j<8; j++)
+            ss << ": " << cal_coeff[j] << " ";
+        ss << "\n";
+        Print( ss.str(), INFO);
     }
 
     Print("ADC configured.\n",DETAIL);

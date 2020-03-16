@@ -52,7 +52,7 @@ private:
     TaskHandle task;
     
     string chan;
-    int nchan;
+    unsigned int nchan;
 
     float Vmin;
     float Vmax;
