@@ -18,6 +18,8 @@ extern "C" void destroy_NIdaq( NIdaq* p ){ delete p;}
 /// Constructor. buff_depth will control depth of FIFO buffer.
 NIdaq::NIdaq( plrsController* ctrl) : plrsModuleDAQ( ctrl){
     buff_depth = 20;
+    max_evt = 0;
+    evt_counter = 0;
 }
 
 
@@ -30,76 +32,122 @@ void NIdaq::Configure(){
 
     Print("Configuring NI DAQ card...\n", DETAIL);
 
+
+    // ***********************************
+    // Find out max run number.
+    // ***********************************
+    
+    max_evt = cparser->GetInt("/cmdl/event", 0);
+        // max_evt is unsigned int. Do not set it to negative values.
+    if( max_evt==0 )
+        max_evt = cparser->GetInt("/cmdl/e", 0);
+    if( max_evt==0 )
+        max_evt = cparser->GetInt("/module/"+GetModuleName()+"/max_evt", 0);
+    if( max_evt==0 )
+        max_evt = 100;
+
+
+    // ***********************************
     // Find out which channel(s) to use.
+    // ***********************************
+
     chan = cparser->GetString("/module/"+GetModuleName()+"/channel");
+        // original channel string specified by the user.
+
+    // if channel is not specified, report error and exit.
     if( chan=="" ){
-        chan = "Dev1/ai0";
-        Print( "Cannot find /module/"+GetModuleName()+"/channel, using default (Dev1/ai0)\n", ERR);
-    }
-    Print( "Channels configured as "+chan+"\n", INFO);
-
-    // Find out how many channels are in use.
-    if( chan.find(":")==string::npos ){
-        nchan = 1;
-            // if no range is speciied in channels, then number of channels is 1
-    }
-    else{
-        // find out the channel number of the beginning channel
-        size_t delim = chan.find(":");
-        size_t range0_low = chan.find("ai");
-        size_t range0_cap = chan.find("AI");
-        size_t range0 = (range0_low!=string::npos) ? range0_low : range0_cap;
-        if( range0==string::npos ){
-            Print("Channel might be in a wrong format. It should be Dev?/ai?\n", ERR);
-            SetStatus(ERROR);
-        }
-        string sub0 = chan.substr( range0+2, delim-range0-2);
-
-        // channel number of the ending channel.
-        string sub1;
-        size_t range1_low = chan.find("ai", delim); // search from the delimiting character.
-        size_t range1_cap = chan.find("AI", delim); // search from the delimiting character.
-        size_t range1 = ( range1_low!=string::npos ) ? range1_low : range1_cap;
-
-        if( range1==string::npos ){  // channel of the form Dev1/ai0:4
-            sub1 = chan.substr( delim+1, chan.size()-delim);
-        }
-        else{
-            sub1 = chan.substr( range1+2, chan.size()-delim);
-        }
-        nchan = stoi(sub1) - stoi(sub0) + 1;
-        if( nchan<0 )
-            nchan = -nchan;
+        Print( "Cannot find /module/"+GetModuleName()+"/channel.\n", ERR);
+        SetStatus(ERROR);
+        return;
     }
 
+    string chan_prefix = chan.substr(0, 7);
+
+    channels = GetChannelsEnabled( chan );
+    if( channels.empty() ){
+        Print("Channel might be in a wrong format. It should be Dev?/ai?\n", ERR);
+        SetStatus(ERROR);        
+    }
+
+
+    // ****************************************************
     // Create task
-    error = DAQmxCreateTask( "", &task);
-    if( error<0 ){
-        stringstream msg;
-        msg << "Cannot create task due to error " << error << "\n";
-        Print( msg.str(), ERR);
+    // ****************************************************
+
+    if( CreateTask()<0 ){
         SetStatus(ERROR);
         return;
     }
     
-    // Configure input channel.
-    Vmin = cparser->GetFloat("/module/"+GetModuleName()+"/Vmin", -10);
-    Vmax = cparser->GetFloat("/module/"+GetModuleName()+"/Vmax", 10);
     
-    DAQmxCreateAIVoltageChan( task, chan.c_str(), "", DAQmx_Val_Cfg_Default, Vmin, Vmax, DAQmx_Val_Volts, NULL);
-    //DAQmxCreateAIVoltageChan( task, chan.c_str(), "", DAQmx_Val_PseudoDiff, Vmin, Vmax, DAQmx_Val_Volts, NULL);
+    // ****************************************************
+    // Configure ranges for input channel
+    // ****************************************************
+    
+    Vmin = cparser->GetFloatArray("/module/"+GetModuleName()+"/Vmin");
+    Vmax = cparser->GetFloatArray("/module/"+GetModuleName()+"/Vmax");
+        // if no value is specified, use the largest range as default.
+
+    if( Vmin.size()<channels.size() || Vmax.size()<channels.size() ){
+        Print("Number of Vmin/Vmax is smaller than channels.\n", ERR);
+        SetStatus(ERROR);
+        return;
+    }
 
 
-    // Configure sampling clock.
+    // ****************************************************
+    // Configure input channel
+    // ****************************************************
+    
+    if( ConfigChannel( chan_prefix, channels, Vmin, Vmax )<0 ){
+        SetStatus(ERROR);
+        return;
+    }
+
+
+    // ****************************************************
+    // Configure sampling parameters.
+    // This is common for all channels.
+    // ****************************************************
+    
     sample_freq = cparser->GetFloat("/module/"+GetModuleName()+"/freq", 1000.);
-    buff_size = cparser->GetFloat("/module/"+GetModuleName()+"/buff_per_chan", 10000);
+    buff_per_chan = cparser->GetFloat("/module/"+GetModuleName()+"/buff_per_chan", 10000);
 
-    mode = DAQmx_Val_ContSamps;
+    if( cparser->GetString("/module/"+GetModuleName()+"/mode", "")=="finite" ){
+        mode = DAQmx_Val_FiniteSamps;
+    }
+    else if( cparser->GetString("/module/"+GetModuleName()+"/mode", "")=="cont" ){
+        mode = DAQmx_Val_ContSamps;
+    }
+    else{
+        Print("/module/"+GetModuleName()+"/mode not recognized or not specified.\n", ERR);
+        SetStatus(ERROR);
+        return;
+    }
 
-    DAQmxCfgSampClkTiming( task, "", sample_freq, DAQmx_Val_Rising, mode, buff_size);
+    
+    // ****************************************************
+    // Configure clock
+    // This is common for all channels.
+    // ****************************************************
+    
+    if( ConfigClock( mode, sample_freq, buff_per_chan) < 0 ){
+        SetStatus(ERROR);
+        return;
+    }
 
 
-    // How to group data, either by channel or by scan number
+    // ****************************************************
+    // Allocate memory for reading data.
+    // ****************************************************
+
+    // first find out how data should be grouped
+    // if groupbychan is true, then format is
+    //      ch0-samp0 ch0-samp1 ... ch1-samp0 ch1-samp1
+    // otherwise, format is
+    //      ch0-samp0 ch1-samp0 ... ch0-sampX ch1-sampX
+    // This value is only used at the time of actual readout, not during configuration.
+     
     bool32 group;
     if( cparser->GetBool("/module/"+GetModuleName()+"/groupbychan", true) ){
         group = DAQmx_Val_GroupByChannel;
@@ -108,29 +156,39 @@ void NIdaq::Configure(){
         group = DAQmx_Val_GroupByScanNumber;
     }
 
-    // Configure I16 or F64
+    
+    // ****************************************************
+    // Configure 16-bit integer or 64-bit float.
+    // ****************************************************
+    
+    // Default is 16-bit integer for saving space.
+    // This information is used at the time of readout.
+
     bool useI16 = true;
     if( ! cparser->GetBool("/module/"+GetModuleName()+"/int16", true) )
         useI16 = false;
 
-    // fill in circular FIFO buffer with resources.
+
+    // Allocate memory and fill the circular FIFO buffer of this module with the pointers to the allocated memory.
     int id = ctrl->GetIDByName( this->GetModuleName() );
     for( int i=0; i<buff_depth; ++i ){
-        PushToBuffer( id, new NIDAQdata( nchan, useI16, buff_size, sample_freq, group) );
+        PushToBuffer( id, new NIDAQdata( channels.size(), useI16, buff_per_chan, sample_freq, group) );
     }
 
-    for( unsigned int i=0; i<nchan; i++){
-        float64 cal_coeff[8] = {0,0,0,0,0,0,0,0};
+    // Print out device calibration information.
+    // This step should be omitted in the future and the information be stored in the header of output instead.
+    for( unsigned int i=0; i<channels.size(); i++){
+        float64 cal_coeff[4] = {0,0,0,0};
         stringstream ss;
-        ss << "Dev1/ai" << i;
+        ss << chan_prefix << channels[i];
         DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), cal_coeff, 8 );
-        for( int j=0; j<8; j++)
+        for( int j=0; j<4; j++)
             ss << ": " << cal_coeff[j] << " ";
         ss << "\n";
         Print( ss.str(), INFO);
     }
 
-    Print("ADC configured.\n",DETAIL);
+    Print("ADC configured.\n", DETAIL);
 
     return;
 }
@@ -153,46 +211,77 @@ void NIdaq::PreRun(){
 
 
 void NIdaq::Run(){
+
+    // this function will be called repeatedly in a while-loop as long as STATE is RUN
+
+    // if max event has reached, simply return
+    if( evt_counter>=max_evt)
+        return;
     
+
+    // first get pointer to available memory
     void* rdo = 0;
+    do{
+        rdo = PullFromBuffer();
+    }while ( rdo==0 && GetState()==RUN );
 
-    while( GetState()==RUN ){
-    	if( rdo==0 ){
-            rdo = PullFromBuffer();
-	    if( rdo==0 ){
-            Print("Failed to get buffer\n", INFO);
-	    	continue;
-            }
+
+    // in finite sample mode, first wait and check if ready.
+    if( mode==DAQmx_Val_FiniteSamps ){   
+        bool32 done = false;
+        do{
+            DAQmxIsTaskDone( task, &done);
+        }while( GetState()==RUN && done==false );
+    }
+
+
+    // readout actual data
+    NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
+    if( data->FmtI16() ){
+        error = DAQmxReadBinaryI16( task, data->buff_per_chan, -1, data->group, data->GetBufferI16(), data->buffsize, &(data->read), NULL);
+        //error = DAQmxReadBinaryI16( task, data->buff_per_chan, -1, data->group, data->GetBufferI16(), data->buffsize, &(data->read), NULL);
+    }
+    else{
+        error = DAQmxReadAnalogF64( task, data->buff_per_chan, -1, data->group, data->GetBufferF64(), data->buffsize, &(data->read), NULL);
+    }
+
+    if( error==0 ){     // Successful read.
+        PushToBuffer( addr_nxt, rdo);
+        rdo = 0;
+    }
+    else if( error==-200284 ){      // This error is recoverable
+        Print("Buffer not ready\n", DETAIL);
+        return;
+        // buffer not ready yet.
+    }
+    else{   // Other unknown errors. Print out error message and terminate.
+        stringstream ss;
+        ss << "Error reading from buffer. Error code " << error << "\n";
+        char errBuff[2048];
+        DAQmxGetExtendedErrorInfo(errBuff,2048);
+        ss << errBuff << "\n";
+        Print( ss.str(), ERR);
+        PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
+            // return pointer to buffer to self.
+        SetStatus(ERROR);
+        return;
+    }
+
+    // In a finite mode, after each read, configuration information is not kept, so reconfigure.
+    if( mode==DAQmx_Val_FiniteSamps ){
+
+        evt_counter++;
+        if( evt_counter>= max_evt ){
+            PushCommand(0, "max-evt");
+            return;
         }
-
-        NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
-        if( data->FmtI16() )
-            error = DAQmxReadBinaryI16( task, data->buff_per_chan, -1, data->group, data->GetBufferI16(), data->buffsize, &(data->read), NULL);
-        else
-            error = DAQmxReadAnalogF64( task, data->buff_per_chan, -1, data->group, data->GetBufferF64(), data->buffsize, &(data->read), NULL);
-
-	    if( error==0 ){
-    	    PushToBuffer( addr_nxt, rdo);
-            rdo = 0;
-	    }
-	    else if( error==-200284 ){
-            Print("Buffer not ready\n", INFO);
-	        continue;
-	        // buffer not ready yet.
-	    }
-	    else{
-	        stringstream ss;
-	        ss << "Error reading from buffer. Error code " << error << "\n";
-            char errBuff[2048];
-            DAQmxGetExtendedErrorInfo(errBuff,2048);
-            ss << errBuff << "\n";
-	        Print( ss.str(), ERR);
-	        PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
-                // return pointer to buffer to self.
-	        SetStatus(ERROR);
-            break;
-	    }
-//        sched_yield();
+        else{
+            // in finite sample mode, hardware setting is not kept between different runs.
+            // have to start over.
+            DAQmxClearTask( task );
+            ReConfigure( chan );
+            DAQmxStartTask( task );
+        }
     }
 }
 
@@ -204,4 +293,119 @@ void NIdaq::PostRun(){
 }
 
 
+void NIdaq::ReConfigure( string input ){
+
+    if( channels.empty() ){
+        Print("ReConfigure is invoked before channels are configured.\n", ERR);
+        return;
+    }
+    if( mode==DAQmx_Val_ContSamps ){
+        Print("Warning: calling ReConfigure for continuous mode.\n", ERR);
+    }
+
+    string chan_prefix = input.substr(0, 7);
+
+    if( CreateTask()<0 ){
+        SetStatus(ERROR);
+        return;
+    }
+    
+    if( ConfigChannel( chan_prefix, channels, Vmin, Vmax )<0 ){
+        SetStatus(ERROR);
+        return;
+    }
+
+    if( ConfigClock( mode, sample_freq, buff_per_chan) < 0 ){
+        SetStatus(ERROR);
+        return;
+    }
+}
+
+
+
+int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
+    return DAQmxCfgSampClkTiming( task, "", freq, DAQmx_Val_Rising, mod, buff_pchan);
+}
+
+
+
+int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax){
+    
+    int32 err;
+    
+    for( unsigned int c=0; c<ch.size(); c++){
+        stringstream chan_name;
+        chan_name << prefix << ch[c];   //  Dev?/ai part + the actual index
+        err = DAQmxCreateAIVoltageChan( task, chan_name.str().c_str(), "", DAQmx_Val_Cfg_Default, vmin[c], vmax[c], DAQmx_Val_Volts, NULL);
+
+        if(err<0)
+            break;
+    }
+    
+    return err;
+}
+
+
+
+int32 NIdaq::CreateTask(){
+    int32 err = DAQmxCreateTask( "", &task);
+    if( err<0 ){
+        stringstream msg;
+        msg << "Cannot create task due to error " << error << "\n";
+        Print( msg.str(), ERR);
+    }
+    return err;
+}
+
+
+
+vector<int> NIdaq::GetChannelsEnabled( string input ){
+
+    vector<int> ret;
+
+    // If a range of channels are specified with :, find out how many are in use.
+    if( input.find(":")==string::npos ){
+        ret.push_back( input.back()-'0' );
+        return ret;
+            // if no range is speciied in channels, the channel index is the last character
+    }
+    else{
+        // find out the channel number of the beginning channel
+        size_t delim = input.find(":");
+        size_t range0_low = input.find("ai");
+        size_t range0_cap = input.find("AI");
+            // check for both lower case and capital case.
+
+        size_t range0 = (range0_low!=string::npos) ? range0_low : range0_cap;
+            // now range0 is the beginning location of first analog input
+        if( range0==string::npos ){
+            return ret;
+        }
+
+        string sub0 = input.substr( range0+2, delim-range0-2);
+            // channel number is the second character since ai/AI up to the delim character
+
+        // find the ending channel number after :
+        string sub1;
+        size_t range1_low = input.find("ai", delim); // search from the delimiting character.
+        size_t range1_cap = input.find("AI", delim); // search from the delimiting character.
+        size_t range1 = ( range1_low!=string::npos ) ? range1_low : range1_cap;
+
+        if( range1==string::npos ){  // channel of the form Dev1/ai0:4
+            sub1 = input.substr( delim+1, input.size()-delim);
+        }
+        else{
+            sub1 = input.substr( range1+2, input.size()-delim);
+        }
+
+        // the beginning and ending index of channels are found. Fill the channels array.
+        int order = stoi(sub1) > stoi(sub0) ? 1 : -1;
+        for( int c = stoi(sub0); c!=stoi(sub1)+order; c+=order){
+            // in termination condition, order is added because the end is inclusive.
+            ret.push_back( c );
+        }
+    }
+
+    return ret;
+}
 

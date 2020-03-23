@@ -2,8 +2,7 @@
     #define NIDAQ_H 1
 
 // system libraries
-#include <fstream>
-#include <chrono>
+#include <vector>
 
 // driver
 #include <NIDAQmx.h>
@@ -53,21 +52,40 @@ private:
     
     string chan;
     unsigned int nchan;
+    std::vector<int> channels;
 
-    float Vmin;
-    float Vmax;
+    std::vector<float> Vmin;
+    std::vector<float> Vmax;
 
     float sample_freq;
+        // sampling frequency
 
     int buff_depth;
         // number of buffers in the FIFO
-    int buff_size;
-        // size of one buffer (1K, 1M)
+    int buff_per_chan;
+        // buffer size per channel (1K, 1M)
 
     int32 mode;
+        // whether continuous or finite samples.
+
     int32 error;
 
     uint32_t start_time;
+
+    unsigned int max_evt;
+
+    unsigned int evt_counter;
+
+    void ReConfigure( string input );
+        // for finite mode where channel has to be reconfigured each time.
+
+    vector<int> GetChannelsEnabled( string input);
+
+    int32 CreateTask();
+
+    int32 ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax);
+
+    int32 ConfigClock( int32 mod, float freq, float buff_per_chan );
 };
 
 
