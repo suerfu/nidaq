@@ -1,0 +1,35 @@
+
+#include <tdmwriter.h>
+
+
+int main( int argc, char* argv[] ){
+
+     // Declare the TDM File's State, Error and Binary Channel Index
+     tdmwState* state = NULL;
+     tdmwError error = TDMW_NOERROR;
+     uInt32 channelIndex = NULL;
+
+     // Create a TDM File
+     state = tdmwOpen(L"TDM_File.TDM",&error);
+
+     // Link Binary File to Newly Created TDM File
+     tdmwSetupFile(state, L"BinaryFile1.dat", TDMW_LITTLE_ENDIAN, &error);
+
+     // Define the Format of the Binary File
+     channelIndex = tdmwSetupChannel(state, 0, 100, TDMW_T_FLOAT64, &error);
+
+     // Create Root Element
+     tdmwCreateRoot(state, L"Root", 1, &error);
+
+     // Create Channel Group
+     tdmwCreateChannelGroup(state, L"Group Name", 1, &error);
+
+     // Create Channel
+     tdmwCreateChannel (state, L"Channel 1", channelIndex, &error);
+
+     // Close TDM File
+     tdmwClose(state,&error);
+
+
+     return 0;
+}
