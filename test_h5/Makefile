@@ -1,8 +1,11 @@
 
-CC = g++ 
+CC = g++ -g
 
-NAME = grp_write
-NAME = ds_write
+#NAME = h5_skeleton
+
+#NAME = grp_write
+NAME = attr_write
+#NAME = ds_write
 #NAME = h5_write
 #NAME = bin_write
 
@@ -21,7 +24,7 @@ CFLAGS += -D_POSIX_C_SOURCE=200809L
 LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
 
 
-# National Instruments
+# HDF5 flags
 CFLAGS += -I/usr/local/hdf5/include/
 LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl
 
@@ -29,7 +32,8 @@ LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl
 all : $(NAME)
 
 $(NAME) : $(NAME).o
-	$(CC) -o $@ $^ ${LDFLAGS}
+	$(CC) $^ ${LDFLAGS}
+#	$(CC) -o $@ $^ ${LDFLAGS}
 
 %.o : %.cpp
 	@echo "compiling $@"

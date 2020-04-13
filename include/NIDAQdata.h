@@ -3,59 +3,105 @@
 
 #include <NIDAQmx.h>
 #include <stdio.h>
+#include <iostream>
+
+using std::cout;
+using std::endl;
 
 class NIDAQdata{
 
 public:
 
-    NIDAQdata( int nc, bool i16, unsigned int buffpc, float frq, bool32 grp ){
+    NIDAQdata( unsigned int nc, unsigned int buffpc){
         nchan = nc;
-        useI16 = i16;
         buff_per_chan = buffpc;
-        buffsize = nc*buff_per_chan;
-        clk = frq;
-        if( useI16 )
-            buffer = new int16[buffsize];
-        else
-            buffer = new float64[buffsize];
-        read = 0;
-        group = grp;
-    }
 
-    ~NIDAQdata(){
-        if( buffer ){
-            if( useI16 )
-                delete GetBufferI16();
-            else
-                delete GetBufferF64();
+        buffer_mem = new int16[nchan*buff_per_chan];
+        cal_coeff_mem = new float64[nchan*4];
+
+        buffer_mat = new int16*[nchan];
+        cal_coeff_mat = new float64*[nchan];
+        for( unsigned int i=0; i<nchan; i++){
+            buffer_mat[i] = buffer_mem + i*buff_per_chan;
+            cal_coeff_mat[i] = cal_coeff_mem + i*4;
         }
     }
 
-    bool FmtI16(){
-        return useI16;
+    ~NIDAQdata(){
+        delete[] buffer_mem;
+        delete[] buffer_mat;
+        delete[] cal_coeff_mem;
+        delete[] cal_coeff_mat;
     }
 
-    float64* GetBufferF64(){
-        return reinterpret_cast<float64*>(buffer);
+    unsigned int GetNChannels(){ return nchan;}
+
+    int GetBufferPerChannel(){ return buff_per_chan;}
+
+    void SetClockFrequency( float c){ clk = c;}
+    float GetClockFrequency(){ return clk;}
+
+    void SetChannelIndex( vector<int> a){
+        chan_index = a;
     }
 
-    int16* GetBufferI16(){
-        return reinterpret_cast<int16*>(buffer);
+    vector<int> GetChannelIndex(){ return chan_index;}
+
+    void SetVoltageRange( vector<float> a, vector<float> b){
+        vmin = a;   vmax = b;
     }
 
-    int nchan;
-    bool useI16;
+    vector<float> GetVmin(){ return vmin;}
+    
+    vector<float> GetVmax(){ return vmax;}
+
+    int16** GetBuffer(){
+        return buffer_mat;
+    }
+
+    int16* GetBufferMem(){
+        return buffer_mem;
+    }
+
+    float64** GetCalCoeff(){ return cal_coeff_mat;}
+    
+    float64* GetCalCoeffMem(){ return cal_coeff_mem;}
+/*
+    void Print(){
+        cout << "N channels: " << nchan << endl;
+        cout << "Clock frequency: " << clk << endl;
+        cout << "Buffer per chan: " << buff_per_chan << endl;
+        for( unsigned int i=0; i<nchan; i++){
+            cout << "Channel " << i << endl;
+            cout << "\tChannel index: " << chan_index[i] << endl;
+            cout << "\tVoltage range: " << vmin[i] << ' ' << vmax[i] << endl;
+            cout << "\tcal coeff: " << cal_coeff[i][0] <<' '<< cal_coeff[i][0] <<' '<< cal_coeff[i][0] <<' '<< cal_coeff[i][0] << endl;
+        }
+    }
+*/
+private:
+
+    unsigned int nchan;
+        // Number of channels enabled.
+
     unsigned int buff_per_chan;
+
     unsigned int buffsize;
 
-    void* buffer;
+    int16** buffer_mat;
+    int16* buffer_mem;
+
+    float64** cal_coeff_mat;
+    float64* cal_coeff_mem;
+
+    vector<int> chan_index;
+    vector<float> vmin;
+    vector<float> vmax;
    
     float clk;
 
     int read;
         // number of samples read
-
-    bool32 group;
 };
 
 #endif

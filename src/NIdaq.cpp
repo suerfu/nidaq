@@ -32,17 +32,15 @@ void NIdaq::Configure(){
 
     Print("Configuring NI DAQ card...\n", DETAIL);
 
-
+    string modadc = "adc";
     // ***********************************
-    // Find out max run number.
+    // Find out max run number. Default to 100
     // ***********************************
     
     max_evt = cparser->GetInt("/cmdl/event", 0);
         // max_evt is unsigned int. Do not set it to negative values.
     if( max_evt==0 )
-        max_evt = cparser->GetInt("/cmdl/e", 0);
-    if( max_evt==0 )
-        max_evt = cparser->GetInt("/module/"+GetModuleName()+"/max_evt", 0);
+        max_evt = cparser->GetInt("/"+modadc+"/evt", 0);
     if( max_evt==0 )
         max_evt = 100;
 
@@ -51,12 +49,12 @@ void NIdaq::Configure(){
     // Find out which channel(s) to use.
     // ***********************************
 
-    chan = cparser->GetString("/module/"+GetModuleName()+"/channel");
+    chan = cparser->GetString("/"+modadc+"/channel");
         // original channel string specified by the user.
 
     // if channel is not specified, report error and exit.
     if( chan=="" ){
-        Print( "Cannot find /module/"+GetModuleName()+"/channel.\n", ERR);
+        Print( "Cannot find /"+modadc+"/channel.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -79,16 +77,16 @@ void NIdaq::Configure(){
         return;
     }
     
-    
+
     // ****************************************************
     // Configure ranges for input channel
     // ****************************************************
     
-    Vmin = cparser->GetFloatArray("/module/"+GetModuleName()+"/Vmin");
-    Vmax = cparser->GetFloatArray("/module/"+GetModuleName()+"/Vmax");
+    Vmin = cparser->GetFloatArray("/"+modadc+"/Vmin");
+    Vmax = cparser->GetFloatArray("/"+modadc+"/Vmax");
         // if no value is specified, use the largest range as default.
 
-    if( Vmin.size()<channels.size() || Vmax.size()<channels.size() ){
+    if( Vmin.size()!=channels.size() || Vmax.size()!=channels.size() ){
         Print("Number of Vmin/Vmax is smaller than channels.\n", ERR);
         SetStatus(ERROR);
         return;
@@ -110,17 +108,17 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
-    sample_freq = cparser->GetFloat("/module/"+GetModuleName()+"/freq", 1000.);
-    buff_per_chan = cparser->GetFloat("/module/"+GetModuleName()+"/buff_per_chan", 10000);
+    sample_freq = cparser->GetFloat("/"+modadc+"/freq", 1000.);
+    buff_per_chan = cparser->GetFloat("/"+modadc+"/buff_per_chan", 10000);
 
-    if( cparser->GetString("/module/"+GetModuleName()+"/mode", "")=="finite" ){
+    if( cparser->GetString("/"+modadc+"/mode", "")=="finite" ){
         mode = DAQmx_Val_FiniteSamps;
     }
-    else if( cparser->GetString("/module/"+GetModuleName()+"/mode", "")=="cont" ){
+    else if( cparser->GetString("/"+modadc+"/mode", "")=="cont" ){
         mode = DAQmx_Val_ContSamps;
     }
     else{
-        Print("/module/"+GetModuleName()+"/mode not recognized or not specified.\n", ERR);
+        Print("/"+modadc+"/mode not recognized or not specified.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -141,54 +139,39 @@ void NIdaq::Configure(){
     // Allocate memory for reading data.
     // ****************************************************
 
-    // first find out how data should be grouped
-    // if groupbychan is true, then format is
-    //      ch0-samp0 ch0-samp1 ... ch1-samp0 ch1-samp1
-    // otherwise, format is
-    //      ch0-samp0 ch1-samp0 ... ch0-sampX ch1-sampX
-    // This value is only used at the time of actual readout, not during configuration.
-     
-    bool32 group;
-    if( cparser->GetBool("/module/"+GetModuleName()+"/groupbychan", true) ){
-        group = DAQmx_Val_GroupByChannel;
-    }
-    else{
-        group = DAQmx_Val_GroupByScanNumber;
-    }
-
-    
-    // ****************************************************
-    // Configure 16-bit integer or 64-bit float.
-    // ****************************************************
-    
-    // Default is 16-bit integer for saving space.
-    // This information is used at the time of readout.
-
+    // Always use 16-bit form and group by channel.
+    bool32 group = DAQmx_Val_GroupByChannel;
     bool useI16 = true;
-    if( ! cparser->GetBool("/module/"+GetModuleName()+"/int16", true) )
-        useI16 = false;
 
 
     // Allocate memory and fill the circular FIFO buffer of this module with the pointers to the allocated memory.
     int id = ctrl->GetIDByName( this->GetModuleName() );
+    int id_rec = addr_nxt;
+
     for( int i=0; i<buff_depth; ++i ){
-        PushToBuffer( id, new NIDAQdata( channels.size(), useI16, buff_per_chan, sample_freq, group) );
+
+        NIDAQdata* foo = new NIDAQdata( channels.size(), buff_per_chan );
+        foo->SetClockFrequency( sample_freq );
+        foo->SetChannelIndex( channels );
+        foo->SetVoltageRange( Vmin, Vmax);
+
+        // Get device calibration information
+        for( unsigned int j=0; j<channels.size(); j++){
+            stringstream ss;
+            ss << chan_prefix << channels[j];
+            DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), foo->GetCalCoeff()[j], 4 );
+        }
+
+        // Hand one copy to recorder to configure metadata.
+        if(i!=0){
+            PushToBuffer( id, foo );
+        }
+        else{
+            PushToBuffer( id_rec, foo );
+        }
     }
 
-    // Print out device calibration information.
-    // This step should be omitted in the future and the information be stored in the header of output instead.
-    for( unsigned int i=0; i<channels.size(); i++){
-        float64 cal_coeff[4] = {0,0,0,0};
-        stringstream ss;
-        ss << chan_prefix << channels[i];
-        DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), cal_coeff, 8 );
-        for( int j=0; j<4; j++)
-            ss << ": " << cal_coeff[j] << " ";
-        ss << "\n";
-        Print( ss.str(), INFO);
-    }
-
-    Print("ADC configured.\n", DETAIL);
+    Print("DAQ configured.\n", DETAIL);
 
     return;
 }
@@ -203,15 +186,17 @@ void NIdaq::Deconfigure(){
 
 
 void NIdaq::PreRun(){
+/*
     Print( "DAQ starting\n", DETAIL);
     start_time = ctrl->GetMSTimeStamp();
     DAQmxStartTask( task );
+*/
 }
 
 
 
 void NIdaq::Run(){
-
+/*
     // this function will be called repeatedly in a while-loop as long as STATE is RUN
 
     // if max event has reached, simply return
@@ -283,6 +268,7 @@ void NIdaq::Run(){
             DAQmxStartTask( task );
         }
     }
+*/
 }
 
 

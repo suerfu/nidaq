@@ -14,15 +14,18 @@ CFLAGS = -Wall -std=c++0x -fPIC -I./include
 
 # polaris files
 CFLAGS += -I/usr/local/include/polaris
-LD_PLRSFLAGS = -L/usr/local/lib -lpolaris
+LDFLAGS += -L/usr/local/lib -lpolaris
 
 # ROOT files
-ROOT_FLAGS = #`root-config --cflags --glibs`
+#ROOT_FLAGS = #`root-config --cflags --glibs`
 
 # National Instruments
 CFLAGS += -D_POSIX_C_SOURCE=200809L
-LD_NIFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
+LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
 
+# HDF5 flags
+CFLAGS += -I/usr/local/hdf5/include/
+LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl
 
 all : lib
 
@@ -31,11 +34,11 @@ lib : ./lib/$(LIBNAME)
 ./lib/$(LIBNAME) : $(OBJ_FILES)
 	@echo "linking $@"
 	@mkdir -p ./lib
-	$(CC) -fPIC -shared -Wl,-soname,$(LIBNAME) -o $@ $^ ${LD_PLRSFLAGS} ${LD_NIFLAGS} ${ROOT_FLAGS}
+	$(CC) -fPIC -shared -Wl,-soname,$(LIBNAME) -o $@ $^ ${LDFLAGS}
 
 %.o : %.cpp
 	@echo "compiling $@"
-	@$(CC) $(CFLAGS) -c $^ -o $@ ${ROOT_FLAGS}
+	@$(CC) $(CFLAGS) -c $^ -o $@
 
 clean:
 	@echo "cleaning..."
