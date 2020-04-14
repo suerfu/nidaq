@@ -1,6 +1,6 @@
 # Makefile for compiing saber library for data acquisition with polaris
 
-CC = g++ -pg # -g
+CC = g++ 
 
 NAME = nidaq
 LIBNAME = lib$(NAME).so
@@ -27,7 +27,13 @@ LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
 CFLAGS += -I/usr/local/hdf5/include/
 LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl
 
-all : lib
+all : test lib
+
+test : hdf5_test.o $(OBJ_FILES)
+	$(CC) -o $@ $^ ${LDFLAGS}
+
+hdf5_test.o : hdf5_test.cpp
+	@$(CC) $(CFLAGS) -c $^ -o $@
 
 lib : ./lib/$(LIBNAME)
 

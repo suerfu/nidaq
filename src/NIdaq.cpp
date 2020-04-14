@@ -40,9 +40,9 @@ void NIdaq::Configure(){
     max_evt = cparser->GetInt("/cmdl/event", 0);
         // max_evt is unsigned int. Do not set it to negative values.
     if( max_evt==0 )
-        max_evt = cparser->GetInt("/"+modadc+"/evt", 0);
+        max_evt = cparser->GetInt("/"+modadc+"/event", 0);
     if( max_evt==0 )
-        max_evt = 100;
+        max_evt = 2000000000;
 
 
     // ***********************************
@@ -140,8 +140,8 @@ void NIdaq::Configure(){
     // ****************************************************
 
     // Always use 16-bit form and group by channel.
-    bool32 group = DAQmx_Val_GroupByChannel;
-    bool useI16 = true;
+    // bool32 group = DAQmx_Val_GroupByChannel;
+    // bool useI16 = true;
 
 
     // Allocate memory and fill the circular FIFO buffer of this module with the pointers to the allocated memory.
@@ -196,7 +196,7 @@ void NIdaq::PreRun(){
 
 
 void NIdaq::Run(){
-/*
+
     // this function will be called repeatedly in a while-loop as long as STATE is RUN
 
     // if max event has reached, simply return
@@ -222,13 +222,7 @@ void NIdaq::Run(){
 
     // readout actual data
     NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
-    if( data->FmtI16() ){
-        error = DAQmxReadBinaryI16( task, data->buff_per_chan, -1, data->group, data->GetBufferI16(), data->buffsize, &(data->read), NULL);
-        //error = DAQmxReadBinaryI16( task, data->buff_per_chan, -1, data->group, data->GetBufferI16(), data->buffsize, &(data->read), NULL);
-    }
-    else{
-        error = DAQmxReadAnalogF64( task, data->buff_per_chan, -1, data->group, data->GetBufferF64(), data->buffsize, &(data->read), NULL);
-    }
+    error = DAQmxReadBinaryI16( task, data->GetBufferPerChannel(), -1, data->GetGroupMode(), data->GetBufferMem(), data->GetBufferSize(), &(data->read), NULL);
 
     if( error==0 ){     // Successful read.
         PushToBuffer( addr_nxt, rdo);
@@ -268,7 +262,6 @@ void NIdaq::Run(){
             DAQmxStartTask( task );
         }
     }
-*/
 }
 
 
@@ -315,7 +308,7 @@ int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
 
 
 
-int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax){
+int32 NIdaq::ConfigChannel( string prefix, vector<unsigned int> ch, vector<float> vmin, vector<float> vmax){
     
     int32 err;
     
@@ -345,9 +338,9 @@ int32 NIdaq::CreateTask(){
 
 
 
-vector<int> NIdaq::GetChannelsEnabled( string input ){
+vector<unsigned int> NIdaq::GetChannelsEnabled( string input ){
 
-    vector<int> ret;
+    vector<unsigned int> ret;
 
     // If a range of channels are specified with :, find out how many are in use.
     if( input.find(":")==string::npos ){

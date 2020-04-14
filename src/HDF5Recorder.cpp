@@ -1,8 +1,10 @@
+
 #include "plrsBaseData.h"
 #include "HDF5Recorder.h"
 
 #include <ctime>
 #include <vector>
+
 
 extern "C" HDF5Recorder* create_HDF5Recorder( plrsController* c ){ return new HDF5Recorder(c);}
 
@@ -14,28 +16,32 @@ HDF5Recorder::HDF5Recorder( plrsController* c) : plrsStateMachine(c){
 
     dump_index = 0;
     bytes_written = 0;
+    event_counter = 0;
 
-    name_dataset = "/adc1";
-    name_detconfig = "/detconfig1";
+    name_dataset = "adc1";
+    name_detconfig = "detconfig1";
     name_event = "event_";
 }
 
 
-HDF5Recorder::~HDF5Recorder(){;}
+HDF5Recorder::~HDF5Recorder(){}
 
 
 void HDF5Recorder::Configure(){
 
     // Configure output file name.
-    // The filename is prefix_DYYYYMMDD_Thhmmss_xxxx.hdf5
-    // where YYYY - year, MM -  month, DD - day
-    // hh - hour (24-hr), mm - minutes, ss - seconds
+    // The filename is prefix_DYYYYMMDD_THHMMSS_Fxxxx.hdf5
 
-    if( cparser->Find("/adc/prefix") )
-        file_prefix = cparser->GetString( "/cmdl/prefix", "");
+    // Find beginning part of file prefix from config file
+    //
+    if( cparser->Find("/cmdl/f") )
+        file_prefix = cparser->GetString( "/cmdl/f", "");
     else
         file_prefix = cparser->GetString( "/adc/prefix", "default");
 
+
+    // Next get current time in the desired format.
+    //
     time_t t = ctrl->GetTimeStamp();
     struct tm tm = *localtime(&t);
 
@@ -51,17 +57,25 @@ void HDF5Recorder::Configure(){
     // Get maximum size per file
     // Default is 1 GB
     max_bytes_per_file = cparser->GetInt("/adc/max_size", 1000);
+    max_bytes_per_file *= 1000000;
 
 
     // Configure the global part of the header.
     // Get a sample data from DAQ module and use it to configure metadata.
     void* rdo = 0;
-    while( rdo==0 ){
-        rdo = PullFromBuffer();
-    }
-    ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
 
 	PushToBuffer( addr_nxt, rdo);
+    while( rdo==0 && GetState()==CONFIG ){
+        rdo = PullFromBuffer();
+    }
+
+    if( GetState()!=CONFIG ){
+        if( rdo!=0 )
+    	    PushToBuffer( addr_nxt, rdo);
+        return;
+    }
+
+    ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
 
 }
 
@@ -72,78 +86,75 @@ void HDF5Recorder::Deconfigure(){
 }
 
 
-void HDF5Recorder::PreRun(){
-/*
-    if( output_file ){
-        if( cparser->GetString("/cmdl/no-header")=="" && cparser->GetString("/module/"+GetModuleName()+"/no-header")=="" ){
-            cparser->Print( output_file, "# " );
-
-            time_t rawtime;
-            struct tm* loctime;
-            time( &rawtime );
-            loctime = localtime( &rawtime);
-
-            output_file << "# " << asctime( loctime) << endl;
-        }
-    }
-*/
-    return;
-}
+void HDF5Recorder::PreRun(){}
 
 
 void HDF5Recorder::Run(){
-    return;
-/*
+
     void* rdo = PullFromBuffer();
+    if( rdo==0 )
+        return;
+        
+    if( bytes_written>=max_bytes_per_file ){
 
-    while( GetState()==RUN ){
-        if( rdo==0 ){
-            rdo = PullFromBuffer();
-	    if( rdo==0 )
-	    	continue;
-        }
-	    if( output_file ){
+        CloseOutput();
 
-            NIDAQdata* data = reinterpret_cast< NIDAQdata* >(rdo);
-            if( data->FmtI16() )
-                output_file.write( reinterpret_cast<char*>(data->buffer), sizeof(int16)*data->buffsize );
-            else
-                output_file.write( reinterpret_cast<char*>(data->buffer), sizeof(float64)*data->buffsize );
-	    }
+        bytes_written = 0;
+        dump_index++;
 
-	    PushToBuffer( addr_nxt, rdo);
-	    rdo = 0;
+        ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
     }
-*/
+    
+    // Write the data to HDF5 file.
+    NIDAQdata* data = reinterpret_cast< NIDAQdata* >(rdo);
+
+    stringstream ss;
+    ss << name_event << event_counter;
+    AddDataset<int16>( ID_dataset, ss.str(), data->GetNChannels(), data->GetBufferPerChannel(), data->GetBufferMem(), H5T_NATIVE_INT16);
+
+    int bytes_read = 2*data->GetNChannels()*data->read;
+        // read is sample per channel, convert to total bytes.
+
+	PushToBuffer( addr_nxt, rdo);
+    rdo = 0;
+
+    event_counter++;
+    bytes_written += bytes_read;
+    //cout << bytes_written << " bytes written" << endl;
+
+    return;
 }
 
 
 void HDF5Recorder::CloseOutput(){
-    H5CloseGroup( id_detconfig );
-    H5CloseGroup( id_dataset );
-    H5CloseFile( id_file );
+    H5CloseGroup( ID_detconfig );
+    H5CloseGroup( ID_dataset );
+    H5CloseFile( ID_file );
 }
 
 
 void HDF5Recorder::ConfigureOutput( NIDAQdata* header){
 
-    bytes_written = 0;
-
     // Update filename and increment dump index.
     filename = GetFileName( file_prefix, dump_index );
-    dump_index ++;
 
+    Print("Opening file "+filename+" for output\n", INFO);
 
+    // ---------------------
     // Create output file.
-    id_file = H5CreateFile( filename );
+    // ---------------------
+    ID_file = H5CreateFile( filename );
 
-    // Add timestamp, software version and user note to the global header.
-    vector<unsigned int> time = { ctrl->GetTimeStamp() };
-    H5AddUIntAttr( id_file, "timestamp", time);
 
-    vector<int> ver = {1,0,0};
-    H5AddIntAttr( id_file, "version", ver);
+    // ---------------------
+    // Add timestamp, software version and user note.
+    // ---------------------
+    AddAttribute<unsigned int>( ID_file, "timestamp", ctrl->GetTimeStamp() , H5T_NATIVE_UINT);
 
+    unsigned int ver[3] = {1,0,0};
+    AddAttribute<unsigned int>( ID_file, "version", 3, ver, H5T_NATIVE_UINT);
+
+/*
     string note = "";
     vector<string> note_arr = cparser->GetStrArray("/cmdl/note");
     for( unsigned int i=0; i< note_arr.size(); i++){
@@ -152,150 +163,72 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header){
         else
             note += " " + note_arr[i];
     }
-    H5AddStringAttr( id_file, "note", note);
+    AddStringAttr( id_file, "note", note);
+*/
 
 
+    // ---------------------
     // Add ADC configuration from the header of the input file.
-    id_detconfig = H5CreateGroup( id_file, name_detconfig);
+    // ---------------------
+    ID_detconfig = H5CreateGroup( ID_file, name_detconfig);
 
     // Add dataset
-    id_dataset = H5CreateGroup( id_file, name_dataset);
+    ID_dataset = H5CreateGroup( ID_file, name_dataset);
 
 
+    // ---------------------
     // Add data shape to ADC dataset.
-    vector<int> temp;
-    temp.push_back( header->GetNChannels() );
-    temp.push_back( header->GetBufferPerChannel() );
-    H5AddIntAttr( id_dataset, name_dataset+"/shape", temp);
-    temp.clear();
+    // ---------------------
+    unsigned int shape[2] = { header->GetNChannels(), header->GetBufferPerChannel()};
+    AddAttribute<unsigned int>( ID_dataset, "/"+name_dataset+"/shape", 2, shape, H5T_NATIVE_UINT);
 
 
+    // ---------------------
     // Add index of channels to metadata
-    H5AddIntAttr( id_dataset, name_dataset+"/index", header->GetChannelIndex() );
+    // ---------------------
+    AddAttribute<unsigned int>( ID_dataset, "/"+name_dataset+"/index", header->GetChannelIndex(), H5T_NATIVE_UINT );
 
 
+    // ---------------------
     // Add voltage range as Nx2 matrix.
+    // ---------------------
     hsize_t dim[2] = { header->GetNChannels(), 4 };
     float* vrange = new float[ dim[0]*dim[1] ];
 
-    dim[1] = 2;
     for( unsigned int j=0; j<dim[0]; j++ ){
         vrange[0+dim[1]*j] = (header->GetVmin())[j];
         vrange[1+dim[1]*j] = (header->GetVmax())[j];
-        cout << j << '\t' << vrange[0+dim[1]*j] <<'\t'<< vrange[0+dim[1]*j] << endl;
     }
-    H5AddFloatMatrixAttr( id_dataset, name_dataset+"/vrange", dim, vrange );
-    //H5AddFloatAttr( id_dataset, name_dataset+"/vrange", dim[1], vrange[0] );
+    AddAttribute<float>( ID_dataset, "/"+name_dataset+"/vrange", dim[0], 2, vrange, H5T_NATIVE_FLOAT );
 
 
+    // ---------------------
     // Add sampling frequency
-    vector<float> ftemp;
-    ftemp.push_back( header->GetClockFrequency() );
-    H5AddFloatAttr( id_dataset, name_dataset+"/fsamp", ftemp);
-    ftemp.clear();
+    // ---------------------
+    AddAttribute<float>( ID_dataset, "/"+name_dataset+"/fsamp", header->GetClockFrequency(), H5T_NATIVE_FLOAT );
 
+
+    // ---------------------
     // Add calibration coefficient.
-    dim[1] = 4;
+    // ---------------------
     for( unsigned int j=0; j<dim[0]; j++ ){
         for( unsigned int k=0; k<dim[1]; k++){
             vrange[k+dim[1]*j] = header->GetCalCoeff()[j][k];
-            cout << j << '\t' << k << '\t' << vrange[k+dim[1]*j]  << endl;
+            //cout << j << '\t' << k << '\t' << vrange[k+dim[1]*j]  << endl;
         }
     }
-    H5AddFloatMatrixAttr( id_dataset, name_dataset+"/calib", dim, vrange );
+    AddAttribute<float>( ID_dataset, "/"+name_dataset+"/calib", dim[0], dim[1], vrange, H5T_NATIVE_FLOAT );
 
     delete[] vrange;
 
     // Add DAQ mode
-    H5AddStringAttr( id_dataset, name_dataset+"/mode", cparser->GetString("/adc/mode") );
+    //H5AddStringAttr( ID_dataset, "/"+name_dataset+"/mode", cparser->GetString("/adc/mode") );
 
     return;
 }
 
     
-    
-herr_t HDF5Recorder::H5AddIntAttr( hid_t id, std::string attr_name, std::vector<int> a ){
-
-    if( a.empty() )
-        return 0;
-
-    hsize_t dims = a.size();
-    hid_t   ds_id = H5Screate_simple( 1, &dims, NULL);
-    hid_t   attr_id = H5Acreate2( id, attr_name.c_str(), H5T_NATIVE_INT, ds_id, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t  status = H5Awrite( attr_id, H5T_NATIVE_INT, &a[0]);
-    
-    H5Aclose( attr_id );
-    H5Sclose( ds_id );
-
-    return status;
-}
-
-
-herr_t HDF5Recorder::H5AddUIntAttr( hid_t id, std::string attr_name, std::vector<unsigned int> a ){
-
-    if( a.empty() )
-        return 0;
-
-    hsize_t dims = a.size();
-    hid_t   ds_id = H5Screate_simple( 1, &dims, NULL);
-    hid_t   attr_id = H5Acreate2( id, attr_name.c_str(), H5T_NATIVE_UINT, ds_id, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t  status = H5Awrite( attr_id, H5T_NATIVE_UINT, &a[0]);
-    
-    H5Aclose( attr_id );
-    H5Sclose( ds_id );
-
-    return status;
-}
-
-
-herr_t HDF5Recorder::H5AddFloatAttr( hid_t id, std::string attr_name, std::vector<float> a ){
-
-    if( a.empty() )
-        return 0;
-
-    hsize_t dims = a.size();
-    hid_t   ds_id = H5Screate_simple( 1, &dims, NULL);
-    hid_t   attr_id = H5Acreate2( id, attr_name.c_str(), H5T_NATIVE_FLOAT, ds_id, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t  status = H5Awrite( attr_id, H5T_NATIVE_FLOAT, &a[0]);
-    
-    H5Aclose( attr_id );
-    H5Sclose( ds_id );
-
-    return status;
-}
-
-
-
-herr_t HDF5Recorder::H5AddFloatAttr( hid_t id, std::string attr_name, hsize_t d, float a[] ){
-
-    hsize_t dims = d;
-    hid_t   ds_id = H5Screate_simple( 1, &dims, NULL);
-    hid_t   attr_id = H5Acreate2( id, attr_name.c_str(), H5T_NATIVE_FLOAT, ds_id, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t  status = H5Awrite( attr_id, H5T_NATIVE_FLOAT, a);
-    
-    H5Aclose( attr_id );
-    H5Sclose( ds_id );
-
-    return status;
-}
-
-
-
-herr_t HDF5Recorder::H5AddFloatMatrixAttr( hid_t id, std::string attr_name, hsize_t dims[], float* a ){
-
-    hid_t ds_id = H5Screate_simple( 2, dims, NULL);
-    //hid_t ds_id = H5Screate( H5S_SIMPLE );
-    //H5Sset_extent_simple( ds_id, 2, dims, NULL);
-
-    hid_t   attr_id = H5Acreate2( id, attr_name.c_str(), H5T_NATIVE_FLOAT, ds_id, H5P_DEFAULT, H5P_DEFAULT);
-    herr_t  status = H5Awrite( attr_id, H5T_NATIVE_FLOAT, a);
-    
-    H5Aclose( attr_id );
-    H5Sclose( ds_id );
-
-    return status;
-}
-
+/*    
 
 
 herr_t HDF5Recorder::H5AddStringAttr( hid_t id, std::string attr_name, std::string a ){
@@ -311,5 +244,16 @@ herr_t HDF5Recorder::H5AddStringAttr( hid_t id, std::string attr_name, std::stri
     H5Sclose( aid3 );
 
     return status;
+}
+*/
+
+// Returns the full filename including the dump index and extension.
+string HDF5Recorder::GetFileName( string prefix, int index ){
+
+    stringstream ss;
+    ss << prefix;
+    ss << 'F' << setfill('0') << setw(4) << index << ".hdf5";
+    return ss.str();
+
 }
 

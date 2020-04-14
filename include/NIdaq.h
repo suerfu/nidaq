@@ -52,7 +52,7 @@ private:
     
     string chan;
     unsigned int nchan;
-    std::vector<int> channels;
+    std::vector<unsigned int> channels;
 
     std::vector<float> Vmin;
     std::vector<float> Vmax;
@@ -79,11 +79,11 @@ private:
     void ReConfigure( string input );
         // for finite mode where channel has to be reconfigured each time.
 
-    vector<int> GetChannelsEnabled( string input);
+    vector<unsigned int> GetChannelsEnabled( string input);
 
     int32 CreateTask();
 
-    int32 ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax);
+    int32 ConfigChannel( string prefix, vector<unsigned int> ch, vector<float> vmin, vector<float> vmax);
 
     int32 ConfigClock( int32 mod, float freq, float buff_per_chan );
 };

@@ -36,16 +36,16 @@ public:
 
     unsigned int GetNChannels(){ return nchan;}
 
-    int GetBufferPerChannel(){ return buff_per_chan;}
+    unsigned int GetBufferPerChannel(){ return buff_per_chan;}
 
     void SetClockFrequency( float c){ clk = c;}
     float GetClockFrequency(){ return clk;}
 
-    void SetChannelIndex( vector<int> a){
+    void SetChannelIndex( vector<unsigned int> a){
         chan_index = a;
     }
 
-    vector<int> GetChannelIndex(){ return chan_index;}
+    vector<unsigned int> GetChannelIndex(){ return chan_index;}
 
     void SetVoltageRange( vector<float> a, vector<float> b){
         vmin = a;   vmax = b;
@@ -59,6 +59,10 @@ public:
         return buffer_mat;
     }
 
+    size_t GetBufferSize(){
+        return nchan*buff_per_chan;
+    }
+
     int16* GetBufferMem(){
         return buffer_mem;
     }
@@ -66,6 +70,10 @@ public:
     float64** GetCalCoeff(){ return cal_coeff_mat;}
     
     float64* GetCalCoeffMem(){ return cal_coeff_mem;}
+
+    bool32 GetGroupMode(){ return DAQmx_Val_GroupByChannel;}
+
+    int read;
 /*
     void Print(){
         cout << "N channels: " << nchan << endl;
@@ -94,14 +102,11 @@ private:
     float64** cal_coeff_mat;
     float64* cal_coeff_mem;
 
-    vector<int> chan_index;
+    vector<unsigned int> chan_index;
     vector<float> vmin;
     vector<float> vmax;
    
     float clk;
-
-    int read;
-        // number of samples read
 };
 
 #endif

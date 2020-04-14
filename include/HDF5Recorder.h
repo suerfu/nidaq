@@ -10,6 +10,7 @@
 #include "NIDAQdata.h"
 
 #include "hdf5.h"
+#include "H5Functions.h"
 
 using namespace std;
 
@@ -49,34 +50,32 @@ private:
 
     //----------- Variables to track progress
     string file_prefix;
-    int dump_index;
     string filename;
 
-    string GetFileName( string prefix, int index ){
-        stringstream ss;
-        ss << prefix;
-        ss << 'F' << setfill('0') << setw(4) << index << ".hdf5";
-        return ss.str();
-    }
+    int dump_index;
+    unsigned long long bytes_written;
+    unsigned long long max_bytes_per_file;
+    unsigned long long event_counter;
 
-    unsigned int bytes_written;
-    unsigned int max_bytes_per_file;
+
+    //----------- Action methods to configure outputs ----//
 
     void ConfigureOutput( NIDAQdata* d);
     
     void CloseOutput();
 
+
     //----------- HDF5 specifid variables ----------------//
 
-    hid_t id_file;
+    hid_t ID_file;
         // HDF5 output file identifier.
 
-    hid_t id_detconfig;
+    hid_t ID_detconfig;
         // HDF5 group identifier for detector configuration.
     string name_detconfig;
         // Detector configuration group name.
     
-    hid_t id_dataset;
+    hid_t ID_dataset;
         // HDF5 group identifier for ADC dataset.
     string name_dataset;
         // Group name for ADC data.
@@ -84,51 +83,9 @@ private:
     string name_event;
         // Naming convention for data.
 
-    unsigned int evt_counter;
-        // Event counter.
 
-    //----------- Utility functions related to HDF5-------//
+    string GetFileName( string prefix, int index );
 
-    hid_t H5CreateFile( string file_name){
-        return H5Fcreate( file_name.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-    }
-        // Encapsulate parameters which are unlikely to change in a dedicated file to make function simpler.
-    
-    herr_t H5CloseFile( hid_t file_id ){
-        return H5Fclose( file_id ); 
-    }
-
-    hid_t H5CreateGroup( hid_t file_id, string grp_name){
-        return H5Gcreate2( file_id, grp_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    }
-    
-    herr_t H5CloseGroup( hid_t id ){
-        return H5Gclose( id);
-    }
-
-    
-    herr_t H5AddIntAttr( hid_t id, std::string attr_name, std::vector<int> a );
-    herr_t H5AddUIntAttr( hid_t id, std::string attr_name, std::vector<unsigned int> a );
-        // id is the HDF5 ID of the object to which attribute is attached.
-    
-
-    herr_t H5AddFloatAttr( hid_t id, std::string attr_name, hsize_t dim, float a[] );
-    herr_t H5AddFloatAttr( hid_t id, std::string attr_name, std::vector<float> a );
-        // id is the HDF5 ID of the object to which attribute is attached.
-    
-    
-    herr_t H5AddFloatMatrixAttr( hid_t id, std::string attr_name, hsize_t dim[], float* a );
-
-    
-    herr_t H5AddStringAttr( hid_t id, std::string attr_name, std::string a );
-        // id is the HDF5 ID of the object to which attribute is attached.
-
-    
-    hid_t H5CreateDataSpace( NIDAQdata h);
-        // HDF5 dataspace ID doesn't change, so the same object can be reused.
-    
-    
-    herr_t H5WriteData( hid_t id, string name, NIDAQdata h );
 };
 
 extern "C" HDF5Recorder* create_HDF5Recorder( plrsController* c);
