@@ -48,6 +48,8 @@ private:
 
 private:
 
+    int next_addr;
+
     //----------- Variables to track progress
     string file_prefix;
     string filename;

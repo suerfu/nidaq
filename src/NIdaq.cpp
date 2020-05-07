@@ -32,6 +32,18 @@ void NIdaq::Configure(){
 
     Print("Configuring NI DAQ card...\n", DETAIL);
 
+
+    // obtain ID/address of the module to which to send data to.
+    string next_module = GetConfigParser()->GetString("/module/"+GetModuleName()+"/next", "");
+        // if not found, returns default value of ""
+    if( next_module!="" ){
+        next_addr = ctrl->GetIDByName( next_module );   // nonnegative if valid
+    }
+    if( next_module=="" || next_addr<0 ){
+        next_addr = ctrl->GetIDByName( this->GetModuleName() );
+    }
+
+
     string modadc = "adc";
     // ***********************************
     // Find out max run number. Default to 100
@@ -145,10 +157,10 @@ void NIdaq::Configure(){
 
 
     // Allocate memory and fill the circular FIFO buffer of this module with the pointers to the allocated memory.
-    int id = ctrl->GetIDByName( this->GetModuleName() );
-    int id_rec = addr_nxt;
+    int id_self = ctrl->GetIDByName( this->GetModuleName() );
+    int id_rec = next_addr;
 
-    for( int i=0; i<buff_depth; ++i ){
+    for( int i=0; i<buff_depth; i++ ){
 
         NIDAQdata* foo = new NIDAQdata( channels.size(), buff_per_chan );
         foo->SetClockFrequency( sample_freq );
@@ -163,8 +175,8 @@ void NIdaq::Configure(){
         }
 
         // Hand one copy to recorder to configure metadata.
-        if(i!=0){
-            PushToBuffer( id, foo );
+        if( i!=0 ){
+            PushToBuffer( id_self, foo );
         }
         else{
             PushToBuffer( id_rec, foo );
@@ -205,10 +217,9 @@ void NIdaq::Run(){
     
 
     // first get pointer to available memory
-    void* rdo = 0;
-    do{
-        rdo = PullFromBuffer();
-    }while ( rdo==0 && GetState()==RUN );
+    void* rdo = PullFromBuffer();
+    if( rdo==0 )
+        return;
 
 
     // in finite sample mode, first wait and check if ready.
@@ -225,21 +236,23 @@ void NIdaq::Run(){
     error = DAQmxReadBinaryI16( task, data->GetBufferPerChannel(), -1, data->GetGroupMode(), data->GetBufferMem(), data->GetBufferSize(), &(data->read), NULL);
 
     if( error==0 ){     // Successful read.
-        PushToBuffer( addr_nxt, rdo);
-        rdo = 0;
+        PushToBuffer( next_addr, rdo);
     }
-    else if( error==-200284 ){      // This error is recoverable
+    else if( error==-200284 ){      // Buffer not ready. This error is recoverable, pointer recycled to itself for reuse.
         Print("Buffer not ready\n", DETAIL);
+        PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
         return;
-        // buffer not ready yet.
     }
     else{   // Other unknown errors. Print out error message and terminate.
+
         stringstream ss;
         ss << "Error reading from buffer. Error code " << error << "\n";
         char errBuff[2048];
         DAQmxGetExtendedErrorInfo(errBuff,2048);
         ss << errBuff << "\n";
+
         Print( ss.str(), ERR);
+
         PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
             // return pointer to buffer to self.
         SetStatus(ERROR);

@@ -48,6 +48,8 @@ protected:
 
 private:
 
+    int next_addr;
+
     TaskHandle task;
     
     string chan;

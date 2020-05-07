@@ -5,6 +5,7 @@
 #include <ctime>
 #include <vector>
 
+#include <unistd.h>
 
 extern "C" HDF5Recorder* create_HDF5Recorder( plrsController* c ){ return new HDF5Recorder(c);}
 
@@ -28,6 +29,17 @@ HDF5Recorder::~HDF5Recorder(){}
 
 
 void HDF5Recorder::Configure(){
+
+    // obtain ID/address of the module to which to send data to.
+    string next_module = GetConfigParser()->GetString("/module/"+GetModuleName()+"/next", "");
+        // if not found, returns default value of ""
+    if( next_module!="" ){
+        next_addr = ctrl->GetIDByName( next_module );   // nonnegative if valid
+    }
+    if( next_module=="" || next_addr<0 ){
+        next_addr = ctrl->GetIDByName( this->GetModuleName() );
+    }
+
 
     // Configure output file name.
     // The filename is prefix_DYYYYMMDD_THHMMSS_Fxxxx.hdf5
@@ -64,19 +76,20 @@ void HDF5Recorder::Configure(){
     // Get a sample data from DAQ module and use it to configure metadata.
     void* rdo = 0;
 
-	PushToBuffer( addr_nxt, rdo);
     while( rdo==0 && GetState()==CONFIG ){
         rdo = PullFromBuffer();
     }
 
+    // If state is no longer CONFIG due to error, return the memory and exit
     if( GetState()!=CONFIG ){
         if( rdo!=0 )
-    	    PushToBuffer( addr_nxt, rdo);
+    	    PushToBuffer( next_addr, rdo);
         return;
     }
 
     ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
 
+	PushToBuffer( next_addr, rdo);
 }
 
 
@@ -115,12 +128,10 @@ void HDF5Recorder::Run(){
     int bytes_read = 2*data->GetNChannels()*data->read;
         // read is sample per channel, convert to total bytes.
 
-	PushToBuffer( addr_nxt, rdo);
-    rdo = 0;
+	PushToBuffer( next_addr, rdo);
 
     event_counter++;
     bytes_written += bytes_read;
-    //cout << bytes_written << " bytes written" << endl;
 
     return;
 }
@@ -214,7 +225,6 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header){
     for( unsigned int j=0; j<dim[0]; j++ ){
         for( unsigned int k=0; k<dim[1]; k++){
             vrange[k+dim[1]*j] = header->GetCalCoeff()[j][k];
-            //cout << j << '\t' << k << '\t' << vrange[k+dim[1]*j]  << endl;
         }
     }
     AddAttribute<float>( ID_dataset, "/"+name_dataset+"/calib", dim[0], dim[1], vrange, H5T_NATIVE_FLOAT );
