@@ -6,9 +6,8 @@ NAME = nidaq
 LIBNAME = lib$(NAME).so
 
 
-CPP_FILES = $(wildcard src/*.cpp)
+CPP_FILES = $(wildcard src/*.cpp) 
 OBJ_FILES = $(patsubst %.cpp, %.o, $(CPP_FILES))
-
 
 CFLAGS = -Wall -std=c++0x -fPIC -I./include 
 

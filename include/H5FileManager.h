@@ -65,10 +65,21 @@ public:
     // =====================================
  
     H5::DataSet CreateDataSet( string name, const H5::DataType& type, unsigned int rank, unsigned int dims[] ){
-        std::cout << "Creating dataset" << std::endl;
+        #ifdef debug
+            std::cout << "CreateDataSet: Creating dataset...\n";
+            std::cout << "CreateDataSet: Checking if dataset already exists...\n";
+        #endif
+
         if( DataSetExist( name ) ){
-            std::cout << "Dataset already exists" << std::endl;
+            #ifdef debug
+                std::cout << "CreateDataSet: Dataset already exists. Reusing existing one...\n";
+            #endif
             return file_ptr->openDataSet( name.c_str());
+        }
+        else{
+            #ifdef debug
+                std::cout << "CreateDataSet: Dataset does not exist. Creating one...\n";
+            #endif        
         }
 
         hsize_t h5dims[rank];
@@ -85,28 +96,64 @@ public:
     // =====================================
     // Attributes
     // =====================================
+
+    // Add attributes individually 
     template < class D >
-    bool AddAttribute( string app_name, const std::map<string, vector<D>> atr_map, const H5::DataType& );
+    bool AddAttribute( string app_name, string atr_name, const D& atr, const H5::DataType& );
 
     template < class D>
-    bool AddAttribute( string app_name, const std::map<string, vector<D>> atr_map );
+    bool AddAttribute( string app_name, string atr_name, const D& atr ){
+        vector<D> atr_vec;
+        atr_vec.push_back(atr);
+        return AddAttribute<D>( app_name, atr_name, atr_vec );
+    }
+
+
+    // Add vector attributes
+    template < class D >
+    bool AddAttribute( string app_name, string atr_name, const vector<D>& atr, const H5::DataType&, int rank = 1, unsigned int dim[] = {} );
+
+    template < class D>
+    bool AddAttribute( string app_name, string atr_name, const vector<D>& atr, int rank=1, unsigned int dim[] = {} );
+
+    // Add list/collection of attributes
+    template < class D >
+    bool AddAttribute( string app_name, const std::map<string, vector<D>>& atr_map, const H5::DataType& );
+
+    template < class D>
+    bool AddAttribute( string app_name, const std::map<string, vector<D>>& atr_map );
+    
 
 private:
 
     bool GroupExist( string name){
-        if( list_group.find( name )==list_group.end() )
+        if( *name.begin()!='/' ){
+            name = "/"+name;
+        }
+
+        if( list_group.find( name )==list_group.end() ){
+            #ifdef debug
+                std::cout << "GroupExist: Couldn't find entry for " << name << ". Below is the whole list of groups:\n";
+                for( std::map< string, H5::Group*>::iterator itr = list_group.begin(); itr!=list_group.end(); itr++){
+                    std::cout << itr->first << '\t';
+                }
+                std::cout << std::endl;
+            #endif
             return false;
+        }
         return true;
     }
 
-    bool DataSetExist( string name){
+    bool DataSetExist( string name, bool warn=false){
         H5::DataSet ds;
         try{
             H5::Exception::dontPrint();
             ds = file_ptr->openDataSet( name.c_str() );
         }
         catch( H5::FileIException not_found_error){
-            std::cout << "Dataset does not exist in exception"<< std::endl;
+            #ifdef debug
+                std::cout << "DataSetExist: Dataset does not exist. Exception caught."<< std::endl;
+            #endif
             return false;
         }
         return true;
@@ -126,11 +173,24 @@ private:
 template <class PtrType>
 bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& type, unsigned int rank, unsigned int dims[]){
     
-    std::cout << "dataset creating\n";
+    #ifdef debug
+        std::cout << "WriteData: Attempting to write data to " << name << "\n";
+        std::cout << "WriteData: Creating dataset...\n";
+    #endif
+
     H5::DataSet dset( CreateDataSet( name, type, rank, dims) );
-    std::cout << "dataset created\n";
+    
+    #ifdef debug
+        std::cout << "WriteData: Dataset created\n";
+        std::cout << "WriteData: Writing data...\n";
+    #endif
+
     dset.write( data, type );
-    std::cout << "dataset written\n";
+
+    #ifdef debug
+        std::cout << "WriteData: Data written" << std::endl;
+    #endif
+
     return true;
 }
 
@@ -138,40 +198,122 @@ bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& t
 template <class PtrType>
 bool H5FileManager::WriteData( PtrType* data, const H5::DataType& type, H5::DataSet* dset){
 
-    if( dset==0 )
+    if( dset==0 ){
+        #ifdef debug
+            std::cout << "WriteData: Data writing failed due to invalid pointer to DataSet" << std::endl;
+        #endif
         return false;
+    }
+
+    #ifdef debug
+        std::cout << "WriteData: Data written" << std::endl;
+    #endif
     
     dset->write( data, type );
 
     return true;
 }
 
+// Add an array of attributes by vector.
 
 template< class D >
-bool H5FileManager::AddAttribute( string app_name, const std::map<string, vector<D>> atr_map, const H5::DataType& datatype ){
+bool H5FileManager::AddAttribute( string app_name, string attr_name, const vector<D>& attr_vec, const H5::DataType& datatype, int rank, unsigned int dim[] ){
 
     if( !file_ptr )
         return false;
 
-    void* foo = 0;  // pointer to object to which attribute is added.
+    void* foo = 0;
+        // pointer to object to which attribute is added. Will point to either file or group.
+
     bool file_attr = false;
     bool group_attr = false;
 
     if( app_name=="" || app_name=="/"){
         file_attr = true;
         foo = file_ptr;
-        std::cout << "file attribute: " << app_name << std::endl;
     }
     else if( GroupExist( app_name) ){
         group_attr = true;
         foo = list_group[app_name];
-        std::cout << "group attribute: " << app_name << std::endl;
     }
     else if( DataSetExist( app_name) ){
         foo =  new H5::DataSet( this->OpenDataSet( app_name ) );
-        std::cout << "dataset attribute: " << app_name << std::endl;
     }
-    else
+    else{
+        return false;
+    }
+
+    if( attr_vec.empty() )
+        return false;
+
+    hsize_t* dims;
+    if( rank==1 ){
+        dims = new hsize_t( attr_vec.size() );
+    }
+    else{
+        dims = new hsize_t[rank];
+        for( int r=0; r<rank; r++)
+            dims[r] = dim[r];
+    }
+
+    H5::DataSpace attr_ds;
+    if( attr_vec.size()==1 ){
+        attr_ds = H5::DataSpace( H5S_SCALAR);
+    }
+    else{
+        attr_ds = H5::DataSpace( rank, dims );
+    }
+
+    H5::Attribute attr;
+    if( file_attr ){
+        try{
+            H5::Exception::dontPrint();
+            attr = file_ptr->createAttribute( attr_name.c_str(), datatype, attr_ds);
+        }
+        catch( H5::AttributeIException error ){
+            // Print( error.getDetailMsg(), ERR);
+            return false;
+        }
+    }
+    else if( group_attr){
+        try{
+            H5::Exception::dontPrint();
+            attr = reinterpret_cast<H5::Group*>(foo)->createAttribute( attr_name.c_str(), datatype, attr_ds);
+        }
+        catch( H5::AttributeIException error ){
+            // Print( error.getDetailMsg(), ERR);
+            return false;
+        }
+    }
+    else{
+        try{
+            H5::Exception::dontPrint();
+            attr = reinterpret_cast<H5::DataSet*>(foo)->createAttribute( attr_name.c_str(), datatype, attr_ds);
+        }
+        catch( H5::AttributeIException error){
+            // Print( error.getDetailMsg(), ERR);
+            return false;
+        }
+    }
+
+    try{
+        attr.write( datatype, attr_vec.data());
+    }
+    catch( H5::AttributeIException error){
+        error.printError();
+        return false;
+    }
+
+    return true;
+}
+
+
+// Add a collection of attributes as a map.
+
+template< class D >
+bool H5FileManager::AddAttribute( string app_name, const std::map<string, vector<D>>& atr_map, const H5::DataType& datatype ){
+
+    if( !file_ptr )
         return false;
 
     typename map<string, vector<D>>::const_iterator itr;
@@ -181,32 +323,22 @@ bool H5FileManager::AddAttribute( string app_name, const std::map<string, vector
         vector<D> attr_vec = itr->second;
         if( attr_vec.empty() )
             continue;
-        for( unsigned int i=0; i< attr_vec.size(); i++)
-            std::cout << "adding " << attr_name << "\t" << attr_vec[i] << std::endl;
-
-        hsize_t dims[1] = { attr_vec.size() };
-        H5::DataSpace attr_ds;
-        if( attr_vec.size()==1 )
-            attr_ds = H5::DataSpace( H5S_SCALAR);
-        else
-            attr_ds = H5::DataSpace( 1, dims );
-
-        H5::Attribute attr;
-        if( file_attr )
-            attr = file_ptr->createAttribute( attr_name.c_str(), datatype, attr_ds);
-        else if( group_attr)
-            attr = reinterpret_cast<H5::Group*>(foo)->createAttribute( attr_name.c_str(), datatype, attr_ds);
-        else
-            attr = reinterpret_cast<H5::DataSet*>(foo)->createAttribute( attr_name.c_str(), datatype, attr_ds);
-
-        std::cout << "attribute created" << std::endl;
-
-        attr.write( datatype, attr_vec.data());
-        
-        std::cout << "attribute written" << std::endl;
+        if (AddAttribute<D>( app_name, attr_name, attr_vec, datatype )==false )
+            return false;
     }
 
     return true;
 }
+
+
+// Add attributes individually.
+
+template< class D >
+bool H5FileManager::AddAttribute( string app_name, string attr_name, const D& attr_data, const H5::DataType& datatype ){
+    vector<D> attr_vec;
+    attr_vec.push_back( attr_data);
+    return AddAttribute( app_name, attr_name, attr_vec, datatype);
+}
+
 
 #endif

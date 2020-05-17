@@ -9,10 +9,11 @@
 
 #include "NIDAQdata.h"
 
-#include "hdf5.h"
-#include "H5Functions.h"
+//#include "hdf5.h"
+#include "H5FileManager.h"
 
 using namespace std;
+
 
 /// This module writes data to file on disk.
 /// Default behavior ( if not overrided with polymorphism )
@@ -29,6 +30,7 @@ using namespace std;
 
 /// 3) default behavior of Run module is to interpret incoming void pointer as array of two floats and writes them separately in two columns.
 
+
 class HDF5Recorder : public plrsStateMachine{
 
 public:
@@ -42,23 +44,19 @@ private:
     //----------- Mandatory polaris virtual functions ----//
 
     void Configure();
+
     void Deconfigure();
+
     virtual void PreRun();
+
     void Run();
+
 
 private:
 
     int next_addr;
 
-    //----------- Variables to track progress
-    string file_prefix;
-    string filename;
-
-    int dump_index;
-    unsigned long long bytes_written;
-    unsigned long long max_bytes_per_file;
-    unsigned long long event_counter;
-
+    unsigned int dim[2];
 
     //----------- Action methods to configure outputs ----//
 
@@ -66,28 +64,84 @@ private:
     
     void CloseOutput();
 
+    int GetNextModuleID();
+        //!< Retrieves the ID/address of next module.
+        //!< If not specified, it returns the module's own address.
 
-    //----------- HDF5 specifid variables ----------------//
+    string GetFilePrefix();
+        //!< Get file prefix from config file or commandline, with commandline having higher priority.
 
-    hid_t ID_file;
-        // HDF5 output file identifier.
+    string GetFileName( string prefix, int fn, const time_t& tm_stamp,  int dmp_id );
+        //!< Concatenates the dump index and extention to the prefix and returns it.
+        //!< The filename is Prefix_Ix_DYYYYMMDD_THHMMSS_Fxxxx.hdf5
 
-    hid_t ID_detconfig;
-        // HDF5 group identifier for detector configuration.
-    string name_detconfig;
-        // Detector configuration group name.
+    //----------- Variables to track progress
+
+    int dump_index;
+
+    unsigned long long bytes_written;
+    unsigned long long max_bytes_per_file;
+
+    unsigned int event_counter;
+        // Local ID. Resets to 1 for each dump.
+    unsigned int event_id;
+        // Global ID. Continuous increment starting from 1.
+    unsigned int max_event_per_file;
+
+private:
+
+    H5FileManager* h5man;
+
+    string file_prefix;
+    string filename;
+
+    uint32_t timestamp_g;   // Global timestamp at the beginning of first dump.
+    uint32_t timestamp_l;   // Local timestamp of each dump.
+
+    int facility_num;
+
+    static const string daq_version;
+    static const string format_version;
+
+    set<string> parameter_added;
+        // Used to keep track of added parameters.
+        // In the end, all other parameters not added will be added as strings.
+
     
-    hid_t ID_dataset;
-        // HDF5 group identifier for ADC dataset.
-    string name_dataset;
-        // Group name for ADC data.
+    template< typename T>
+    void AddAttribute(string  app_name, string attr_name, vector<T> attr, int rank=1, unsigned int dim[]={} ){
+        h5man->AddAttribute<T>( app_name, attr_name, attr, rank, dim );
+        parameter_added.insert(attr_name);
+    }
 
-    string name_event;
-        // Naming convention for data.
+    template< typename T>
+    void AddAttribute(string  app_name, string attr_name, T attr ){
+        h5man->AddAttribute<T>( app_name, attr_name, attr );
+        parameter_added.insert(attr_name);
+    }
 
+    template< typename T>
+    void AddAttribute( string full_name, T attr){
+        h5man->AddAttribute<T>( GetDirectory(full_name), GetName(full_name), attr);
+    }
 
-    string GetFileName( string prefix, int index );
+    string GetDirectory( string foo ){
+        if( foo[0]!='/' )
+            foo = "/"+foo;
+        string sub = foo.substr(0, foo.find_last_of('/'));
+        if( sub=="" )
+            sub = "/";
+        return sub;
+    }
 
+    string GetName( string foo ){
+        string sub = foo.substr(foo.find_last_of('/')+1);
+        if( sub=="" )
+            sub = foo;
+        return sub;
+    }
+
+    uint64_t GetSeriesNumber( int facility_num, const time_t& tmstamp);
 };
 
 extern "C" HDF5Recorder* create_HDF5Recorder( plrsController* c);

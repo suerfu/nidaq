@@ -7,23 +7,21 @@
 #include <cstring>
 
 
-/// creator function for loading the module.
 extern "C" NIdaq* create_NIdaq( plrsController* c ){ return new NIdaq(c);}
 
 
-/// destructor function for releasing the module.
 extern "C" void destroy_NIdaq( NIdaq* p ){ delete p;}
 
 
-/// Constructor. buff_depth will control depth of FIFO buffer.
 NIdaq::NIdaq( plrsController* ctrl) : plrsModuleDAQ( ctrl){
     buff_depth = 20;
+        // NOTE: depth of FIFO buffer is set to be 20 by default.
     max_evt = 0;
     evt_counter = 0;
 }
 
 
-/// Destructor. Nothing needs to be done.
+
 NIdaq::~NIdaq(){}
 
 
@@ -32,10 +30,9 @@ void NIdaq::Configure(){
 
     Print("Configuring NI DAQ card...\n", DETAIL);
 
-
-    // obtain ID/address of the module to which to send data to.
+    // Obtain ID/address of the module to which to send data to.
+    // If not found, returns default value of ""
     string next_module = GetConfigParser()->GetString("/module/"+GetModuleName()+"/next", "");
-        // if not found, returns default value of ""
     if( next_module!="" ){
         next_addr = ctrl->GetIDByName( next_module );   // nonnegative if valid
     }
@@ -44,9 +41,12 @@ void NIdaq::Configure(){
     }
 
 
-    string modadc = "adc";
+    string modadc = "adc1";
+        // NOTE: In current version, only one ADC card is supported.
+        // For future multiple devices, make this part a for loop.
+
     // ***********************************
-    // Find out max run number. Default to 100
+    // Find out max run number. Default to 2 billion
     // ***********************************
     
     max_evt = cparser->GetInt("/cmdl/event", 0);
@@ -61,10 +61,9 @@ void NIdaq::Configure(){
     // Find out which channel(s) to use.
     // ***********************************
 
+    // Original channel string specified by the user.
+    // If channel is not specified, report error and exit.
     chan = cparser->GetString("/"+modadc+"/channel");
-        // original channel string specified by the user.
-
-    // if channel is not specified, report error and exit.
     if( chan=="" ){
         Print( "Cannot find /"+modadc+"/channel.\n", ERR);
         SetStatus(ERROR);
@@ -72,8 +71,13 @@ void NIdaq::Configure(){
     }
 
     string chan_prefix = chan.substr(0, 7);
+        // NOTE: Only one device is supported at the moment.
+        // This way of extracting the Dev?/ai? part is valid up to 0 devices.
 
     channels = GetChannelsEnabled( chan );
+        // NOTE: Channels specified by range. In the future, channel should also be specified by listing individual channels.
+        // NOTE: It is not clear what happens if channels are specified in a wrong order.
+
     if( channels.empty() ){
         Print("Channel might be in a wrong format. It should be Dev?/ai?\n", ERR);
         SetStatus(ERROR);        
@@ -85,6 +89,7 @@ void NIdaq::Configure(){
     // ****************************************************
 
     if( CreateTask()<0 ){
+        Print("Failed to create NI new task.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -96,10 +101,10 @@ void NIdaq::Configure(){
     
     Vmin = cparser->GetFloatArray("/"+modadc+"/Vmin");
     Vmax = cparser->GetFloatArray("/"+modadc+"/Vmax");
-        // if no value is specified, use the largest range as default.
 
+    // if no value is specified, report error.
     if( Vmin.size()!=channels.size() || Vmax.size()!=channels.size() ){
-        Print("Number of Vmin/Vmax is smaller than channels.\n", ERR);
+        Print("The number of Vmin/Vmax is less than channels enabled.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -120,13 +125,13 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
-    sample_freq = cparser->GetFloat("/"+modadc+"/freq", 1000.);
-    buff_per_chan = cparser->GetFloat("/"+modadc+"/buff_per_chan", 10000);
+    sample_freq = cparser->GetFloat("/"+modadc+"/sample_rate", 1000.);
+    buff_per_chan = cparser->GetFloat("/"+modadc+"/nb_samples", 10000);
 
-    if( cparser->GetString("/"+modadc+"/mode", "")=="finite" ){
+    if( cparser->GetString("/"+modadc+"/data_mode", "")=="finite" ){
         mode = DAQmx_Val_FiniteSamps;
     }
-    else if( cparser->GetString("/"+modadc+"/mode", "")=="cont" ){
+    else if( cparser->GetString("/"+modadc+"/data_mode", "")=="cont" ){
         mode = DAQmx_Val_ContSamps;
     }
     else{
@@ -151,7 +156,7 @@ void NIdaq::Configure(){
     // Allocate memory for reading data.
     // ****************************************************
 
-    // Always use 16-bit form and group by channel.
+    // Always use 16-bit form and group by channel. Therefore following code is obsolete.
     // bool32 group = DAQmx_Val_GroupByChannel;
     // bool useI16 = true;
 
@@ -161,20 +166,22 @@ void NIdaq::Configure(){
     int id_rec = next_addr;
 
     for( int i=0; i<buff_depth; i++ ){
-
-        NIDAQdata* foo = new NIDAQdata( channels.size(), buff_per_chan );
+        
+        // Create object to hold NI ADC configuration and data.
+        // Then record clock frequency and voltage ranges.
+        NIDAQdata* foo = new NIDAQdata( channels, buff_per_chan );
         foo->SetClockFrequency( sample_freq );
-        foo->SetChannelIndex( channels );
         foo->SetVoltageRange( Vmin, Vmax);
+        foo->SetDataMode( mode );
 
-        // Get device calibration information
+        // Get device calibration information and write them onto the NIDAQ object.
         for( unsigned int j=0; j<channels.size(); j++){
             stringstream ss;
             ss << chan_prefix << channels[j];
             DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), foo->GetCalCoeff()[j], 4 );
         }
 
-        // Hand one copy to recorder to configure metadata.
+        // Hand one copy to recorder to configure metadata. Send the rest to DAQ module's own FIFO buffer.
         if( i!=0 ){
             PushToBuffer( id_self, foo );
         }
@@ -198,31 +205,27 @@ void NIdaq::Deconfigure(){
 
 
 void NIdaq::PreRun(){
-/*
     Print( "DAQ starting\n", DETAIL);
     start_time = ctrl->GetMSTimeStamp();
     DAQmxStartTask( task );
-*/
 }
 
 
 
 void NIdaq::Run(){
 
-    // this function will be called repeatedly in a while-loop as long as STATE is RUN
-
-    // if max event has reached, simply return
-    if( evt_counter>=max_evt)
+    // If max event has reached, inform the controller about maximum event and simply return.
+    if( evt_counter>=max_evt){
+        SendUserCommand( "/ctrl/max-evt");
         return;
+    }
     
-
-    // first get pointer to available memory
+    // Get pointer to available memory. If failed, return and try again (in the next loop iteration).
     void* rdo = PullFromBuffer();
     if( rdo==0 )
         return;
 
-
-    // in finite sample mode, first wait and check if ready.
+    // In finite sample mode, first wait and check if ready.
     if( mode==DAQmx_Val_FiniteSamps ){   
         bool32 done = false;
         do{
@@ -231,20 +234,22 @@ void NIdaq::Run(){
     }
 
 
-    // readout actual data
+    // Readout actual data into the NIDAQdata object using the NI driver's function.
     NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
     error = DAQmxReadBinaryI16( task, data->GetBufferPerChannel(), -1, data->GetGroupMode(), data->GetBufferMem(), data->GetBufferSize(), &(data->read), NULL);
 
-    if( error==0 ){     // Successful read.
+    // If read is Successful, hand the data over to next module (which is usually a recorder object).
+    if( error==0 ){
         PushToBuffer( next_addr, rdo);
     }
-    else if( error==-200284 ){      // Buffer not ready. This error is recoverable, pointer recycled to itself for reuse.
+    // Failed due to buffer not ready. This error is recoverable, pointer recycled to itself for reuse and do not report error.
+    else if( error==-200284 ){
         Print("Buffer not ready\n", DETAIL);
         PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
         return;
     }
-    else{   // Other unknown errors. Print out error message and terminate.
-
+    // Other unknown errors. Print out error message and terminate.
+    else{
         stringstream ss;
         ss << "Error reading from buffer. Error code " << error << "\n";
         char errBuff[2048];
@@ -253,23 +258,20 @@ void NIdaq::Run(){
 
         Print( ss.str(), ERR);
 
-        PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);
-            // return pointer to buffer to self.
+        PushToBuffer( ctrl->GetIDByName(this->GetModuleName()), rdo);   // return pointer to buffer to self.
         SetStatus(ERROR);
         return;
     }
 
     // In a finite mode, after each read, configuration information is not kept, so reconfigure.
     if( mode==DAQmx_Val_FiniteSamps ){
-
         evt_counter++;
         if( evt_counter>= max_evt ){
             PushCommand(0, "max-evt");
             return;
         }
         else{
-            // in finite sample mode, hardware setting is not kept between different runs.
-            // have to start over.
+            // In finite sample mode, hardware setting is not kept between different runs. Need to start over.
             DAQmxClearTask( task );
             ReConfigure( chan );
             DAQmxStartTask( task );
@@ -298,7 +300,7 @@ void NIdaq::ReConfigure( string input ){
     string chan_prefix = input.substr(0, 7);
 
     if( CreateTask()<0 ){
-        SetStatus(ERROR);
+        SetStatus(ERROR);   // Report error to polaris.
         return;
     }
     
@@ -321,19 +323,20 @@ int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
 
 
 
-int32 NIdaq::ConfigChannel( string prefix, vector<unsigned int> ch, vector<float> vmin, vector<float> vmax){
+int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax){
     
     int32 err;
     
     for( unsigned int c=0; c<ch.size(); c++){
         stringstream chan_name;
-        chan_name << prefix << ch[c];   //  Dev?/ai part + the actual index
+        chan_name << prefix << ch[c];
+            // Channel name consists of Dev?/ai part + the actual index of channel(s)
+            // A range of channels can be specified with : as Dev?/ai1:2
         err = DAQmxCreateAIVoltageChan( task, chan_name.str().c_str(), "", DAQmx_Val_Cfg_Default, vmin[c], vmax[c], DAQmx_Val_Volts, NULL);
 
         if(err<0)
             break;
-    }
-    
+    }    
     return err;
 }
 
@@ -351,9 +354,9 @@ int32 NIdaq::CreateTask(){
 
 
 
-vector<unsigned int> NIdaq::GetChannelsEnabled( string input ){
+vector<int> NIdaq::GetChannelsEnabled( string input ){
 
-    vector<unsigned int> ret;
+    vector<int> ret;    // Return vector that consists of the indices of channels enabled.
 
     // If a range of channels are specified with :, find out how many are in use.
     if( input.find(":")==string::npos ){

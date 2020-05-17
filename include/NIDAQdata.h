@@ -1,79 +1,109 @@
 #ifndef NIDAQDATA_H
-#define NIDAQDATA_H 1
+    #define NIDAQDATA_H 1
 
-#include <NIDAQmx.h>
 #include <stdio.h>
 #include <iostream>
+#include <vector>
+
+#include <NIDAQmx.h>
 
 using std::cout;
 using std::endl;
+using std::vector;
+
+//! Object to hold data/information obtained from National Instrument ADC card.
+
+//! NIDAQdata is an object to hold ADC configuration information and actual
+//! ADC data read from National Instrument ADC card.
+//! It is typically initialized by the DAQ module and passed to recorder module for writing output.
 
 class NIDAQdata{
 
 public:
 
-    NIDAQdata( unsigned int nc, unsigned int buffpc){
-        nchan = nc;
-        buff_per_chan = buffpc;
+    NIDAQdata( const vector<int>& indices, unsigned int buffpc);
+        //!< Constructor.
+        //!< \param[in] indices Vector of integers representing the indices of channels to be used.
+        //!< \param[in] buffpc  Size of buffer (sample size) per channel.
+        //!< At this stage all channels are assumed to have the same sample size.
 
-        buffer_mem = new int16[nchan*buff_per_chan];
-        cal_coeff_mem = new float64[nchan*4];
+    ~NIDAQdata();
+        //!< Destructor which frees allocated memory.
 
-        buffer_mat = new int16*[nchan];
-        cal_coeff_mat = new float64*[nchan];
-        for( unsigned int i=0; i<nchan; i++){
-            buffer_mat[i] = buffer_mem + i*buff_per_chan;
-            cal_coeff_mat[i] = cal_coeff_mem + i*4;
-        }
-    }
-
-    ~NIDAQdata(){
-        delete[] buffer_mem;
-        delete[] buffer_mat;
-        delete[] cal_coeff_mem;
-        delete[] cal_coeff_mat;
-    }
-
-    unsigned int GetNChannels(){ return nchan;}
+    int GetNChannels(){ return nchan;}
+        //!< \return Number of channels enabled.
 
     unsigned int GetBufferPerChannel(){ return buff_per_chan;}
+        //!< \return Size of samples per channel.
 
-    void SetClockFrequency( float c){ clk = c;}
+    void SetClockFrequency( float frequency){ clk = frequency;}
+        //!< Sets clock frequency (sampling rate) in Hz.
+        //!< \param[in] frequency   Clock frequency (sampling rate) in Hz.
+        //!< Note that the input has to be a reasonable and valid float.
+        //!< This is not checked against in the rest of the code.
+
     float GetClockFrequency(){ return clk;}
+        //!< \return Clock frequency (sampling rate) in Hz.
 
-    void SetChannelIndex( vector<unsigned int> a){
-        chan_index = a;
+    vector<int> GetChannelIndex(){ return chan_index;}
+        //!< \return Vector of channel indices enabled for this data set.
+
+    void SetVoltageRange( vector<float> min, vector<float> max){
+        vmin = min;   vmax = max;
     }
-
-    vector<unsigned int> GetChannelIndex(){ return chan_index;}
-
-    void SetVoltageRange( vector<float> a, vector<float> b){
-        vmin = a;   vmax = b;
-    }
+        //!< Sets the voltage ranges for channels enabled.
+        //!< \param[in] min Vector of floats representing the minimum voltages of channels enabled.
+        //!< \param[in] max Vector of floats representing the maximum voltages of channels enabled.
+        //!< A proper voltage range is needed for having the most accurate ADC performance.
 
     vector<float> GetVmin(){ return vmin;}
+        //!< \return The minimum voltage ranges of channels enabled.
     
     vector<float> GetVmax(){ return vmax;}
+        //!< \return The maximum voltage ranges of channels enabled.
 
     int16** GetBuffer(){
         return buffer_mat;
     }
+        //!< \return 2D int16 pointer.
+        //!< This pointer should be used when one wants to access ADC values as elements of a matrix.
 
     size_t GetBufferSize(){
         return nchan*buff_per_chan;
     }
+        //!< \return Total size of buffer (sample sizes).
 
     int16* GetBufferMem(){
         return buffer_mem;
     }
+        //!< \return The underlying address where the data read is stored.
+        //!< This address is a contiguous block that can and should be used in writing HDF5 files.
+
+    void SetDataMode( int mode){ data_mode = mode;}
+        //!< Sets the mode for data acquisition.
+        //!< \param[in] mode DAQ mode. Code representation to be developed later.
+
+    int GetDataMode(){ return data_mode;}
+        //!< \return The mode of data acquisition.
+        //!< The integer representation will be developed and made official later.
 
     float64** GetCalCoeff(){ return cal_coeff_mat;}
+        //!< \return The pointer to memory where calibration coefficients for enabled channels are stored.
+        //!< The calibration coefficients are coefficients of a 3rd order polynomial.
+        //!< The address returned can be used to access in a matrix convention, i.e. [channel][poly-order].
     
     float64* GetCalCoeffMem(){ return cal_coeff_mem;}
+        //!< \return The memory where calibration coefficients are stored.
+        //!< This address represents a contiguous block. Coefficients are grouped by channels.
+        //!< This address can be used to write HDF5 files.
+        //!< The calibration coefficients are coefficients of a 3rd order polynomial.
 
     bool32 GetGroupMode(){ return DAQmx_Val_GroupByChannel;}
+        //!< Obsolete. It is used to get the grouping mode of the data, i.e. by channels or by sample.
+        //!< This method is obsolete since it was determined that we always group by channels.
 
     int read;
+        //!< Bytes read from ADC.
 /*
     void Print(){
         cout << "N channels: " << nchan << endl;
@@ -89,24 +119,39 @@ public:
 */
 private:
 
+    int data_mode;
+        //!< Mode of data taking. Continuous, finite, triggered, etc.
+        //!< Currently, only continuous and finite are supported.
+
     unsigned int nchan;
-        // Number of channels enabled.
+        //!< Number of channels enabled.
 
     unsigned int buff_per_chan;
+        //!< Size of buffer (number of samples) per channel.
 
     unsigned int buffsize;
+        //!< Total size of buffer.
 
     int16** buffer_mat;
+        //!< Pointer to buffer. Used for accessing elements using matrix convention.
     int16* buffer_mem;
+        //!< Pointer to buffer as contiguous block of data.
+        //!< Needed for writing HDF5 output.
 
     float64** cal_coeff_mat;
+        //!< Calibration coefficients for access as matrix.
     float64* cal_coeff_mem;
+        //!< Calibration coefficients as contiguous block of data.
+        //!< Needed for HDF5 output.
 
-    vector<unsigned int> chan_index;
-    vector<float> vmin;
-    vector<float> vmax;
+    vector<int> chan_index;
+        //!< Vector that holds Indices of channels enabled.
+
+    vector<float> vmin;     //!< Minimum range of input voltages.
+    vector<float> vmax;     //!< Maximum range of input voltages.
    
     float clk;
+        //!< Clock frequency/sampling rate in Hz.
 };
 
 #endif

@@ -2,6 +2,7 @@
 #include "H5FileManager.h"
 
 #include <iostream>
+#include <cstring>
 
 using std::cout;
 using std::endl;
@@ -66,8 +67,13 @@ bool H5FileManager::OpenGroup( string name ){
     if( file_ptr==0  )
         return false;
     
+    // check and convert name to standard format: /foor/bar
+
     if( *(name.end()-1)=='/')
         name.erase( name.end()-1);
+
+    if( *(name.begin())!='/' )
+        name = "/"+name;
 
     std::size_t pos = 0;
 
@@ -95,71 +101,78 @@ bool H5FileManager::CloseGroup( const string& name){
 }
 
 
-
-
-/*
-    // File info.
-    unsigned int GetNDataSets( const string& name);
-
-    // File operations
-
-    // Group operations
-
-    // Dataset operations
-    bool CreateDataset( const string& name, unsigned int dims[]={1} );
-    bool CloseDataset( const string& name );
-
-    template<class datatype, class h5type>
-    bool WriteData( datatype* data);
-
-    // Attributes
-    bool AddAttribute()
-
-*/
-
-
+// ====================================================================================
+// Operations with map.
 
 template <>
-bool H5FileManager::AddAttribute<int>( string app_name, const std::map<string, vector<int>> atr_map ){
+bool H5FileManager::AddAttribute<int>( string app_name, const std::map<string, vector<int>>& atr_map ){
     return AddAttribute<int>( app_name, atr_map, H5::PredType::NATIVE_INT);
 }
 
 template <>
-bool H5FileManager::AddAttribute<unsigned int>( string app_name, const std::map<string, vector<unsigned int>> atr_map ){
+bool H5FileManager::AddAttribute<unsigned int>( string app_name, const std::map<string, vector<unsigned int>>& atr_map ){
     return AddAttribute<unsigned int>( app_name, atr_map, H5::PredType::NATIVE_UINT);
 }
 
 template <>
-bool H5FileManager::AddAttribute<float>( string app_name, const std::map<string, vector<float>> atr_map ){
+bool H5FileManager::AddAttribute<float>( string app_name, const std::map<string, vector<float>>& atr_map ){
     return AddAttribute<float>( app_name, atr_map, H5::PredType::NATIVE_FLOAT);
 }
 
 template <>
-bool H5FileManager::AddAttribute<double>( string app_name, const std::map<string, vector<double>> atr_map ){
-    return AddAttribute<double>( app_name, atr_map, H5::PredType::NATIVE_DOUBLE);
-}
-
-
-
-template <>
-bool H5FileManager::AddAttribute<const char*>( string app_name, const std::map<string, vector<const char*>> atr_map ){
+bool H5FileManager::AddAttribute<const char*>( string app_name, const std::map<string, vector<const char*>>& atr_map ){
     return AddAttribute<const char*>( app_name, atr_map, H5::StrType(H5::PredType::C_S1, H5T_VARIABLE) );
 }
 
-
 template <>
-bool H5FileManager::AddAttribute<string>( string app_name, const std::map<string, vector<string>> atr_map ){
+bool H5FileManager::AddAttribute<string>( string app_name, const std::map<string, vector<string>>& atr_map ){
     
     std::map<string, vector<const char*>> cstr;
 
     std::map<string, vector<string>>::const_iterator itr;
     for( itr = atr_map.begin(); itr!=atr_map.end(); itr++ ){
-        vector<string> val = itr->second;
-        for( vector<string>::const_iterator itr2 = val.begin(); itr2!=val.end(); itr2++ ){
+        for( vector<string>::const_iterator itr2 = itr->second.cbegin(); itr2!=itr->second.cend(); itr2++ ){
             cstr[ itr->first ].push_back( itr2->c_str() );
         }
     }
     return AddAttribute<const char*>( app_name, cstr, H5::StrType(H5::PredType::C_S1, H5T_VARIABLE) );
 }
 
+// ====================================================================================
+
+// Operations on vector
+
+template <>
+bool H5FileManager::AddAttribute<int>( string app_name, string atr_name, const vector<int>& atr, int rank, unsigned int dim[]  ){
+    return AddAttribute<int>( app_name, atr_name, atr, H5::PredType::NATIVE_INT, rank, dim);
+}
+
+
+template <>
+bool H5FileManager::AddAttribute<float>( string app_name, string atr_name, const vector<float>& atr, int rank, unsigned int dim[] ){
+    return AddAttribute<float>( app_name, atr_name, atr, H5::PredType::NATIVE_FLOAT, rank, dim);
+}
+
+template <>
+bool H5FileManager::AddAttribute<uint32_t>( string app_name, string atr_name, const vector<uint32_t>& atr, int rank, unsigned int dim[] ){
+    return AddAttribute<uint32_t>( app_name, atr_name, atr, H5::PredType::NATIVE_UINT32, rank, dim);
+}
+
+template <>
+bool H5FileManager::AddAttribute<uint64_t>( string app_name, string atr_name, const vector<uint64_t>& atr, int rank, unsigned int dim[] ){
+    return AddAttribute<uint64_t>( app_name, atr_name, atr, H5::PredType::NATIVE_UINT64, rank, dim);
+}
+
+template <>
+bool H5FileManager::AddAttribute<string>( string app_name, string atr_name, const vector<string>& atr, int rank, unsigned int dim[] ){
+    vector<const char*> cstr;
+    for( unsigned int i=0; i<atr.size(); i++)
+        cstr.push_back( atr[i].c_str() );
+    return AddAttribute<const char*>( app_name, atr_name, cstr, H5::StrType(H5::PredType::C_S1, H5T_VARIABLE), rank, dim );
+}
+
+template <>
+bool H5FileManager::AddAttribute<const char*>( string app_name, string atr_name, const vector<const char*>& atr, int rank, unsigned int dim[]  ){
+    return AddAttribute<const char*>( app_name, atr_name, atr, H5::StrType(H5::PredType::C_S1, H5T_VARIABLE), rank, dim );
+}
 
