@@ -114,7 +114,16 @@ void NIdaq::Configure(){
     // Configure input channel
     // ****************************************************
     
-    if( ConfigChannel( chan_prefix, channels, Vmin, Vmax )<0 ){
+    error = ConfigChannel( chan_prefix, channels, Vmin, Vmax );
+    if( error < 0 ){
+        stringstream ss;
+        ss << "Failed to configure ADC channels. Error code " << error << "\n";
+
+        char errBuff[2048];
+        DAQmxGetExtendedErrorInfo(errBuff,2048);
+        ss << errBuff << "\n";
+
+        Print( ss.str(), ERR);
         SetStatus(ERROR);
         return;
     }
@@ -146,8 +155,18 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
-    if( ConfigClock( mode, sample_freq, buff_per_chan) < 0 ){
-        SetStatus(ERROR);
+    error = ConfigClock( mode, sample_freq, buff_per_chan);
+    if( error < 0 ){
+        stringstream ss;
+        ss << "Failed to configure ADC clock. Error code " << error << "\n";
+
+        char errBuff[2048];
+        DAQmxGetExtendedErrorInfo(errBuff,2048);
+        ss << errBuff << "\n";
+
+        Print( ss.str(), ERR);
+        SetStatus( ERROR );
+
         return;
     }
 
@@ -178,7 +197,17 @@ void NIdaq::Configure(){
         for( unsigned int j=0; j<channels.size(); j++){
             stringstream ss;
             ss << chan_prefix << channels[j];
-            DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), foo->GetCalCoeff()[j], 4 );
+            error = DAQmxGetAIDevScalingCoeff( task, ss.str().c_str(), foo->GetCalCoeff()[j], 4 );
+
+            if( error < 0 ){
+                stringstream ss;
+                ss << "Failed to get ADC conversion factor. Error code " << error << "\n";
+                char errBuff[2048];
+                DAQmxGetExtendedErrorInfo(errBuff,2048);
+                ss << errBuff << "\n";
+                Print( ss.str(), ERR);
+                SetStatus( ERROR );
+            }
         }
 
         // Hand one copy to recorder to configure metadata. Send the rest to DAQ module's own FIFO buffer.
@@ -332,7 +361,13 @@ int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, v
         chan_name << prefix << ch[c];
             // Channel name consists of Dev?/ai part + the actual index of channel(s)
             // A range of channels can be specified with : as Dev?/ai1:2
-        err = DAQmxCreateAIVoltageChan( task, chan_name.str().c_str(), "", DAQmx_Val_Cfg_Default, vmin[c], vmax[c], DAQmx_Val_Volts, NULL);
+        err = DAQmxCreateAIVoltageChan( task, chan_name.str().c_str(), "", DAQmx_Val_Cfg_Default/*DAQmx_Val_Cfg_Default*/, vmin[c], vmax[c], DAQmx_Val_Volts, NULL);
+            // Channel termination options are:
+            //  DAQmx_Val_Cfg_Default
+            //  DAQmx_Val_RSE
+            //  DAQmx_Val_NRSE
+            //  DAQmx_Val_Diff
+            //  DAQmx_Val_PseudoDiff
 
         if(err<0)
             break;

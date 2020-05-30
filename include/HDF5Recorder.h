@@ -75,6 +75,15 @@ private:
         //!< Concatenates the dump index and extention to the prefix and returns it.
         //!< The filename is Prefix_Ix_DYYYYMMDD_THHMMSS_Fxxxx.hdf5
 
+    string name_dataset;
+        //!< HDF5 group name for ADC dataset.
+
+    string name_event;
+        //!< Prefix for naming each 
+
+    string name_detconfig;
+        //!< Group name for detector configuration.
+
     //----------- Variables to track progress
 
     int dump_index;

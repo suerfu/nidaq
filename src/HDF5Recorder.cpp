@@ -27,15 +27,14 @@ HDF5Recorder::HDF5Recorder( plrsController* c) : plrsStateMachine(c){
     event_id = 0;
     max_event_per_file = 100000;
         // Default number of events in each dump. This is not usually editable through config file.
-    max_bytes_per_file = 1000000;
+    max_bytes_per_file = 1000000000;
         // Default number of bytes per file.
 
-    // Below is obsolete at the moment, Might be implemented for easy changing of event output name.
-    /*
+    // the following variables are defined such that naming conventions can be easily changed in the future.
     name_dataset = "adc1";
-    name_detconfig = "detconfig1";
     name_event = "event_";
-    */
+    name_detconfig = "detconfig1";
+    
 }
 
 
@@ -45,16 +44,20 @@ HDF5Recorder::~HDF5Recorder(){}
 
 
 void HDF5Recorder::Configure(){
+
+    Print("configuring...\n", DEBUG);
     
     // =========================================================
     // Initialize HDF5 manager. Data will be written in ConfigureOutput..
     // =========================================================
     h5man = new H5FileManager();
+    Print("Initialized HDF5 file manager.\n", DEBUG);
 
     // =========================================================
     // Obtain ID/address of the module to which to send data to.
     // =========================================================
     next_addr = GetNextModuleID();
+    Print("Data loop set up.\n", DEBUG);
 
 
     // =========================================================
@@ -78,18 +81,20 @@ void HDF5Recorder::Configure(){
     // Open output HDF5 file. Report error if fail.
     // =========================================================
 
-    Print("Opening file "+filename+" for output\n", INFO);
+    Print("Opening file "+filename+" for output...\n", INFO);
     if( h5man->OpenFile( filename, "w+")==false ){
         Print("Failed to create HDF5 file for output.\n", ERR);
         SetStatus(ERROR);
         return;
     }
+    Print("File successfully opened for output.\n", DEBUG);
 
 
     // =========================================================
     // Get a template data object from DAQ module and use it to configure metadata.
     // =========================================================
 
+    Print("Configuring HDF5 file metadata using empty data template...\n", DEBUG);
     void* rdo = 0;
     while( rdo==0 && GetState()==CONFIG ){
         rdo = PullFromBuffer();
@@ -104,9 +109,12 @@ void HDF5Recorder::Configure(){
 
     // Use the empty data template to configure the output meta data.
     ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
+    Print("HDF5 file metadata configured.\n", DEBUG);
 
     // After configuring the output, give the data to the next module.
 	PushToBuffer( next_addr, rdo);
+    
+    Print( this->GetModuleName()+" configured.\n", DEBUG);
 }
 
 
@@ -131,7 +139,7 @@ void HDF5Recorder::Run(){
     
     // If either the bytes written is more than the maximum specified, or event number exceeds the maximum event,
     // close the current output and opens another HDF5 with dump number incremented.
-    if( h5man->GetFileSize() >= max_bytes_per_file || event_counter+1 >= max_event_per_file ){
+    if( h5man->GetFileSize()/8 >= max_bytes_per_file || event_counter+1 >= max_event_per_file ){
         CloseOutput();
 
         // reset event and byte counters, increment dump index but do not touch event id (which is global).
@@ -160,7 +168,7 @@ void HDF5Recorder::Run(){
 
     // Configure the name of the event and write the 2D data to HDF5 file.
     stringstream ss;
-    ss << "event_" << event_counter+1;
+    ss << "/" << name_dataset << "/" << name_event << event_counter+1;
     string event_name = ss.str();
 
     dim[0] = data->GetNChannels();
@@ -200,7 +208,8 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     // ================================================
     // Global/File-wide Attributes
     // ================================================
-    
+    Print( "Configuring global attributes...\n", DEBUG);
+
     AddAttribute( "/daq_version", daq_version );
     AddAttribute( "/format_version", format_version );
 
@@ -219,21 +228,31 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     }
     AddAttribute( "/series_num", GetSeriesNumber( facility_num, timestamp_g) );
 
+    Print( "Global attributes configured.\n", DEBUG);
 
     // ================================================
     // Attributes under ADC Group
     // ================================================
+    
+    string group_name = name_dataset;
+    Print( "Configuring attributes under group " + group_name + "...\n", DEBUG);
 
-    string group_name = "adc1";
     h5man->OpenGroup( "/"+group_name );
+    Print( "Created group " + group_name + ".\n", DEBUG );
 
     AddAttribute( "/"+group_name, "sample_rate", header->GetClockFrequency() );
+    Print( "Added sample_rate.\n", DEBUG);
     AddAttribute( "/"+group_name, "nb_channels", header->GetNChannels() );
+    Print( "Added nb_channels.\n", DEBUG);
     AddAttribute( "/"+group_name, "nb_samples", header->GetBufferPerChannel() );
+    Print( "Added nb_samples.\n", DEBUG);
     AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
+    Print( "Added adc_channel_indices.\n", DEBUG);
     AddAttribute( "/"+group_name, "data_mode", header->GetDataMode() );
+    Print( "Added data_mode.\n", DEBUG);
     // Need to update number of event later
     AddAttribute( "/"+group_name, "adc_name", GetConfigParser()->GetStrArray("/"+group_name+"/adc_name") );
+    Print( "Added adc_name.\n", DEBUG);
 
     const int rank = 2;
     unsigned int dim[2];
@@ -243,6 +262,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     // ---------------------
 
     dim[0] = header->GetNChannels();
+    cout << dim[0] << endl;
     dim[1] = 2;
     vector<float> foo;
     vector<float> vmin = header->GetVmin();
@@ -252,6 +272,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
         foo.push_back( vmax[i] );
     }
     AddAttribute( "/"+group_name, "voltage_range", foo, rank, dim );
+    Print( "Added voltage_range.\n", DEBUG);
 
 
     // ---------------------
@@ -265,26 +286,39 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
         }
     }
     AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
+    Print( "Added adc_conversion_factor.\n", DEBUG);
 
-    vector<string> adc_conn = GetConfigParser()->GetStrArray("/"+group_name+"/adc_connections");
-    if( adc_conn.size()>0 ){
-        dim[1] = 2;
-        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
-    }
+    AddAttribute( "/"+group_name, "adc_connections", GetConfigParser()->GetStrArray("/"+group_name+"/adc_connections") );
+//  The following code is prone to Seg fault if wrong numbers of parameters are specified in the config file.
+//    vector<string> adc_conn = GetConfigParser()->GetStrArray("/"+group_name+"/adc_connections");
+//    if( adc_conn.size()>0 ){
+//        dim[1] = 2;
+//        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
+//    }
+
+    Print( "Added adc_connections.\n", DEBUG);
+    
+    Print( "Group attributes configured.\n", DEBUG);
 
     // ================================================
     // Attributes under detconfig1
     // ================================================
 
-    group_name = "detconfig1";
+    group_name = name_detconfig;
+    Print( "Configuring attributes under group " + group_name + "...\n", DEBUG);
+
     h5man->OpenGroup( "/"+group_name );
 
     AddAttribute( "/"+group_name, "device_name_list", GetConfigParser()->GetStrArray("/"+group_name+"/device_name_list") );
     AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
-    if( adc_conn.size()>0 ){
-        dim[1] = 2;
-        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
-    }
+    AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
+
+//  The following code is prone to Seg fault if wrong numbers of parameters are specified in the config file.
+//  adc_con is previously defined, and is currently temporarily not supported.
+//    if( adc_conn.size()>0 ){
+//        dim[1] = 2;
+//        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
+//    }
 
     vector<string> param_list;
     param_list.push_back( "tes_bias" );
@@ -307,6 +341,8 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     for( vector<string>::iterator itr = param_list.begin(); itr!=param_list.end(); itr++ ){
         AddAttribute( "/"+group_name, *itr, GetConfigParser()->GetIntArray("/"+group_name+"/"+*itr) );
     }
+
+    Print( "Group attributes configured.\n", DEBUG);
 
     return;
 }
@@ -362,7 +398,7 @@ string HDF5Recorder::GetFilePrefix(){
     if( GetConfigParser()->Find("/cmdl/f") )
         file_prefix = GetConfigParser()->GetString( "/cmdl/f", "");
     else
-        file_prefix = GetConfigParser()->GetString( "/adc/prefix", "Default");
+        file_prefix = GetConfigParser()->GetString( "/prefix", "Default");
     return file_prefix;
 }
 
