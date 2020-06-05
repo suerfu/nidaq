@@ -27,14 +27,15 @@ HDF5Recorder::HDF5Recorder( plrsController* c) : plrsStateMachine(c){
     event_id = 0;
     max_event_per_file = 100000;
         // Default number of events in each dump. This is not usually editable through config file.
-    max_bytes_per_file = 1000000000;
-        // Default number of bytes per file.
+
+    max_MB_per_file = 1000;
+        // Default number of mega bytes per file.
+    MB = 1024*1024;
 
     // the following variables are defined such that naming conventions can be easily changed in the future.
     name_dataset = "adc1";
     name_event = "event_";
-    name_detconfig = "detconfig1";
-    
+    name_detconfig = "detconfig1";    
 }
 
 
@@ -59,6 +60,7 @@ void HDF5Recorder::Configure(){
     next_addr = GetNextModuleID();
     Print("Data loop set up.\n", DEBUG);
 
+    max_MB_per_file = GetConfigParser()->GetInt("/max_MB_per_file", max_MB_per_file);
 
     // =========================================================
     // Get output file name.
@@ -129,6 +131,11 @@ void HDF5Recorder::Deconfigure(){
 void HDF5Recorder::PreRun(){}
 
 
+void HDF5Recorder::PostRun(){
+    AddAttribute( "/" + name_dataset, "nb_events", event_counter );
+    CloseOutput();
+}
+
 
 void HDF5Recorder::Run(){
 
@@ -139,7 +146,12 @@ void HDF5Recorder::Run(){
     
     // If either the bytes written is more than the maximum specified, or event number exceeds the maximum event,
     // close the current output and opens another HDF5 with dump number incremented.
-    if( h5man->GetFileSize()/8 >= max_bytes_per_file || event_counter+1 >= max_event_per_file ){
+    //
+    // It is dangerous to use GetFileSize from HDF5 app due to overflow at around 4 GB. Instead use long long int to count ourselves.
+    // cout << h5man->GetFileSize()*100 << '\t' << h5man->GetFileSize()/MB << '\t' << max_MB_per_file << '\t' << (h5man->GetFileSize()/MB >= max_MB_per_file) << endl; 
+
+    if( bytes_written >= MB*max_MB_per_file || event_counter+1 >= max_event_per_file ){
+        AddAttribute( "/" + name_dataset, "nb_events", event_counter );
         CloseOutput();
 
         // reset event and byte counters, increment dump index but do not touch event id (which is global).
@@ -157,6 +169,7 @@ void HDF5Recorder::Run(){
         }
 
         ConfigureOutput( reinterpret_cast<NIDAQdata*>(rdo) );
+        Print("Output file successfully configured.\n", DEBUG);
     }
 
     // =========================================================
@@ -173,24 +186,36 @@ void HDF5Recorder::Run(){
 
     dim[0] = data->GetNChannels();
     dim[1] = data->GetBufferPerChannel();
-    h5man->WriteData<int16>( data->GetBufferMem(), event_name, H5::PredType::NATIVE_INT16, 2, dim);
 
-    // Add necessary metadata to the dataset.
-    AddAttribute( event_name, "event_index", event_counter+1 );
-    AddAttribute( event_name, "event_id", event_id+1 );
-    AddAttribute( event_name, "event_num", dump_index*max_event_per_file+event_counter+1 );
-    AddAttribute( event_name, "event_time", ctrl->GetTimeStamp() );
+    Print("Writing event data...\n", DEBUG);
+    bool b =  h5man->WriteData<int16>( data->GetBufferMem(), event_name, H5::PredType::NATIVE_INT16, 2, dim);
+    Print("Event data written.\n", DEBUG);
+
+    if( b==false ){
+        Print( "Failed to write event data.\n", ERR);
+	    PushToBuffer( next_addr, rdo);
+        SetStatus(ERROR);
+        return;
+    }
+    else{
+        // Add necessary metadata to the dataset.
+        AddAttribute( event_name, "event_index", event_counter+1 );
+        AddAttribute( event_name, "event_id", event_id+1 );
+        AddAttribute( event_name, "event_num", dump_index*max_event_per_file+event_counter+1 );
+        AddAttribute( event_name, "event_time", ctrl->GetTimeStamp() );
+        Print("Event attribute added.\n", DEBUG);
+    }
 
     // Return the data pointer back to DAQ module (or the next module in the pipeline).
 	PushToBuffer( next_addr, rdo);
 
     // Below is obsolete since for bytes written, currently HDF5 built-in functions are used.
-    //int bytes_read = 2*data->GetNChannels()*data->read;
+    int bytes_read = 2*data->GetNChannels()*data->read;
         // read is sample per channel, convert to total bytes.
 
     event_counter++;
     event_id++;
-    //bytes_written += bytes_read;
+    bytes_written += bytes_read;
 
     return;
 }
@@ -262,7 +287,6 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     // ---------------------
 
     dim[0] = header->GetNChannels();
-    cout << dim[0] << endl;
     dim[1] = 2;
     vector<float> foo;
     vector<float> vmin = header->GetVmin();

@@ -54,6 +54,12 @@ bool H5FileManager::OpenFile( const string& name, const string& f){
 
 bool H5FileManager::CloseFile(){
     if( file_ptr!=0 ){
+        for( map<string, H5::Group*>::iterator itr = list_group.begin(); itr!=list_group.end(); itr++ ){
+            if( itr->second != 0 ){
+                itr->second->close();
+            }
+        }
+        list_group.clear();
         file_ptr->close();
         file_ptr = 0;
         return true;

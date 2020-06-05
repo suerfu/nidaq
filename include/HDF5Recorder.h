@@ -47,9 +47,11 @@ private:
 
     void Deconfigure();
 
-    virtual void PreRun();
+    void PreRun();
 
     void Run();
+    
+    void PostRun();
 
 
 private:
@@ -89,7 +91,8 @@ private:
     int dump_index;
 
     unsigned long long bytes_written;
-    unsigned long long max_bytes_per_file;
+    unsigned long long max_MB_per_file;
+    unsigned long long MB;
 
     unsigned int event_counter;
         // Local ID. Resets to 1 for each dump.

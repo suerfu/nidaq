@@ -173,6 +173,7 @@ private:
 template <class PtrType>
 bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& type, unsigned int rank, unsigned int dims[]){
     
+    try{
     #ifdef debug
         std::cout << "WriteData: Attempting to write data to " << name << "\n";
         std::cout << "WriteData: Creating dataset...\n";
@@ -190,6 +191,15 @@ bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& t
     #ifdef debug
         std::cout << "WriteData: Data written" << std::endl;
     #endif
+    }
+    catch( H5::FileIException error ){
+        #ifdef debug
+            std::cout << "Failed due to FileIException. " << std::endl;
+            error.printError();
+        #endif
+        //std::cout << error.getDetailMsg() << std::endl;
+        return false;
+    }
 
     return true;
 }
