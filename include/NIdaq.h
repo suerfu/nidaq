@@ -3,6 +3,7 @@
 
 // system libraries
 #include <vector>
+#include <chrono>
 
 // driver
 #include <NIDAQmx.h>
@@ -56,7 +57,7 @@ private:
     TaskHandle task;
         //!< National Instrument task handle.
     
-    string chan;                //!< Channel name specified by the user. From this value the channels enabled are deduced.
+    vector<string> chan_array;  //!< Channel name specified by the user via config file. From this value the channels enabled are deduced.
     unsigned int nchan;         //!< Number of channels enabled.
     std::vector<int> channels;  //!< Vector of integers representing channels enabled in this run.
 
@@ -68,7 +69,14 @@ private:
     int buff_depth;             //!< Number of buffers in the polaris circular FIFO. This is the total number of NIDAQdata object used.
     int buff_per_chan;          //!< Buffer size per channel (1K, 1M), which is also number of samples per channel.
 
-    int32 mode;                 //!< Mode of operation for the ADC card (continuous, finite, etc.). Currently only continuous and finite are supported. The actual code representation will be officialized later.
+    string trig_mode;           //!< Trigger mode(cont, trig-ext, trig-int).
+    
+    int32 nimode;               //!< Mode of operation for the ADC card (continuous, finite).
+
+    unsigned int trig_period_us;       //!< Period for internal trigger in microsecond.
+
+    string trig_channel;        //!< Input channel for external trigger signal.
+
 
     int32 error;                //!< Error code returned by NI.
 
@@ -78,11 +86,31 @@ private:
 
     unsigned int evt_counter;   //!< Event counter to keep track of events acquired.
 
-    void ReConfigure( string input );
+    std::chrono::high_resolution_clock::time_point timer_start;
+        //!<
+
+    std::chrono::high_resolution_clock::time_point timer_now;
+        //!<
+
+    void ResetTimer(){
+        timer_start = std::chrono::high_resolution_clock::now();
+    }
+
+    unsigned int GetTimerMicroSec(){
+        timer_now = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration_cast<std::chrono::microseconds>( timer_now-timer_start).count();
+    }
+    
+    /*unsigned int GetTimerMilliSec(){
+        timer_now = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration_cast<std::chrono::milliseconds>( timer_now-timer_start).count();
+    }*/
+
+    void ReConfigure( vector<string> input );
         //!< Convenience function used to reconfigured each time.
         //!< It turns out that in finite mode without interrupt handler, the channel has to be reconfigured each time one acquisition is finished.
 
-    vector<int> GetChannelsEnabled( string input);
+    vector<int> GetChannelsEnabled( vector<string> input);
         //!< Finds out the channels to be used from the input string.
         //!< \param[in] input Input string in the format Dev?/ai?:?.
         //!< \return Vector of integers that represents channel indices.
@@ -103,6 +131,11 @@ private:
         //!< \param[in] mod     ADC mode.
         //!< \param[in] freq    ADC sampling frequency in Hz.
         //!< \param[in] buff_per_chan   Buffer per channel. This is the number of samples to be acquired before data is made ready for readout.
+
+    int32 ConfigTrigger( string trig_mode, string trig_channel);
+        //!< Configures external hardware trigger.
+        //!< \param[in] trig_mode   This function will do nothing unless trig_mode is trig-ext.
+        //!< \param[in] trig_channel    String that specifies the trigger channel.
 };
 
 

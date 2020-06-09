@@ -63,18 +63,18 @@ void NIdaq::Configure(){
 
     // Original channel string specified by the user.
     // If channel is not specified, report error and exit.
-    chan = cparser->GetString("/"+modadc+"/channel");
-    if( chan=="" ){
+    chan_array = cparser->GetStrArray("/"+modadc+"/channel");
+    if( chan_array.empty() ){
         Print( "Cannot find /"+modadc+"/channel.\n", ERR);
         SetStatus(ERROR);
         return;
     }
 
-    string chan_prefix = chan.substr(0, 7);
+    string chan_prefix = chan_array[0].substr(0, 7);
         // NOTE: Only one device is supported at the moment.
         // This way of extracting the Dev?/ai? part is valid up to 0 devices.
 
-    channels = GetChannelsEnabled( chan );
+    channels = GetChannelsEnabled( chan_array );
         // NOTE: Channels specified by range. In the future, channel should also be specified by listing individual channels.
         // NOTE: It is not clear what happens if channels are specified in a wrong order.
 
@@ -104,7 +104,7 @@ void NIdaq::Configure(){
 
     // if no value is specified, report error.
     if( Vmin.size()!=channels.size() || Vmax.size()!=channels.size() ){
-        Print("The number of Vmin/Vmax is less than channels enabled.\n", ERR);
+        Print("The number of Vmin/Vmax is different fromchannels enabled.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -137,14 +137,42 @@ void NIdaq::Configure(){
     sample_freq = cparser->GetFloat("/"+modadc+"/sample_rate", 1000.);
     buff_per_chan = cparser->GetFloat("/"+modadc+"/nb_samples", 10000);
 
-    if( cparser->GetString("/"+modadc+"/data_mode", "")=="finite" ){
-        mode = DAQmx_Val_FiniteSamps;
+    trig_mode = cparser->GetString("/"+modadc+"/data_mode", "");
+
+    // First check if mode is specified.
+    if( trig_mode=="" ){
+        Print( "/"+modadc+"/mode not specified.\n", ERR);
+        SetStatus(ERROR);
+        return;        
     }
-    else if( cparser->GetString("/"+modadc+"/data_mode", "")=="cont" ){
-        mode = DAQmx_Val_ContSamps;
+    // Continuous mode.
+    else if( trig_mode=="cont" ){
+        nimode = DAQmx_Val_ContSamps;
+    }
+    // Finite mode, check if external trigger or internal software trigger
+    else if( trig_mode=="trig-ext" || trig_mode=="trig-int" ){
+        nimode = DAQmx_Val_FiniteSamps;
+        // For ext mode, need the trigger input channel.
+        if( trig_mode=="trig-ext" ){
+            trig_channel = cparser->GetString( "/"+modadc+"/trigger_channel", "");
+            if( trig_channel=="" ){
+                Print( "Trigger channel not specified.\n", ERR);
+                SetStatus(ERROR);
+                return;
+            }
+        }
+        // For int mode, need the period.
+        else if( trig_mode=="trig-int" ){
+            trig_period_us = cparser->GetInt( "/"+modadc+"/trigger_period_us", 0);
+            if( trig_period_us==0 ){
+                Print( "Trigger period not specified.\n", ERR);
+                SetStatus(ERROR);
+                return;
+            }
+        }
     }
     else{
-        Print("/"+modadc+"/mode not recognized or not specified.\n", ERR);
+        Print( "/"+modadc+"/mode not recognized.\n", ERR);
         SetStatus(ERROR);
         return;
     }
@@ -155,10 +183,29 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
-    error = ConfigClock( mode, sample_freq, buff_per_chan);
+    error = ConfigClock( nimode, sample_freq, buff_per_chan);
     if( error < 0 ){
         stringstream ss;
         ss << "Failed to configure ADC clock. Error code " << error << "\n";
+
+        char errBuff[2048];
+        DAQmxGetExtendedErrorInfo(errBuff,2048);
+        ss << errBuff << "\n";
+
+        Print( ss.str(), ERR);
+        SetStatus( ERROR );
+
+        return;
+    }
+
+
+    // ****************************************************
+    // Configure trigger
+    // ****************************************************
+    error = ConfigTrigger( trig_mode, trig_channel );
+    if( error < 0 ){
+        stringstream ss;
+        ss << "Failed to configure trigger. Error code " << error << "\n";
 
         char errBuff[2048];
         DAQmxGetExtendedErrorInfo(errBuff,2048);
@@ -191,7 +238,7 @@ void NIdaq::Configure(){
         NIDAQdata* foo = new NIDAQdata( channels, buff_per_chan );
         foo->SetClockFrequency( sample_freq );
         foo->SetVoltageRange( Vmin, Vmax);
-        foo->SetDataMode( mode );
+        foo->SetDataMode( nimode );
 
         // Get device calibration information and write them onto the NIDAQ object.
         for( unsigned int j=0; j<channels.size(); j++){
@@ -235,8 +282,13 @@ void NIdaq::Deconfigure(){
 
 void NIdaq::PreRun(){
     Print( "DAQ starting\n", DETAIL);
-    start_time = ctrl->GetMSTimeStamp();
+
     DAQmxStartTask( task );
+    
+    start_time = ctrl->GetMSTimeStamp();
+    if( trig_mode=="trig-int" ){
+        ResetTimer();
+    }
 }
 
 
@@ -248,25 +300,38 @@ void NIdaq::Run(){
         SendUserCommand( "/ctrl/max-evt");
         return;
     }
-    
+
+    // If trigger mode is internal periodic, then make sure the specified period has elapsed.
+    if( trig_mode=="trig-int" ){
+        if( GetTimerMicroSec()<trig_period_us ){
+            return;
+        }
+        else{
+            Print( "Triggering...\n", INFO);
+            ResetTimer();
+        }
+    }
+
     // Get pointer to available memory. If failed, return and try again (in the next loop iteration).
     void* rdo = PullFromBuffer();
     if( rdo==0 )
         return;
 
     // In finite sample mode, first wait and check if ready.
-    if( mode==DAQmx_Val_FiniteSamps ){   
+    if( nimode==DAQmx_Val_FiniteSamps ){   
         bool32 done = false;
         do{
             DAQmxIsTaskDone( task, &done);
         }while( GetState()==RUN && done==false );
     }
 
+    // First cast void* to something usable
+    NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
 
     // Readout actual data into the NIDAQdata object using the NI driver's function.
-    NIDAQdata* data = reinterpret_cast<NIDAQdata*>(rdo);
     error = DAQmxReadBinaryI16( task, data->GetBufferPerChannel(), -1, data->GetGroupMode(), data->GetBufferMem(), data->GetBufferSize(), &(data->read), NULL);
 
+    // Check the error code.
     // If read is Successful, hand the data over to next module (which is usually a recorder object).
     if( error==0 ){
         PushToBuffer( next_addr, rdo);
@@ -293,7 +358,7 @@ void NIdaq::Run(){
     }
 
     // In a finite mode, after each read, configuration information is not kept, so reconfigure.
-    if( mode==DAQmx_Val_FiniteSamps ){
+    if( nimode==DAQmx_Val_FiniteSamps ){
         evt_counter++;
         if( evt_counter>= max_evt ){
             PushCommand(0, "max-evt");
@@ -302,7 +367,7 @@ void NIdaq::Run(){
         else{
             // In finite sample mode, hardware setting is not kept between different runs. Need to start over.
             DAQmxClearTask( task );
-            ReConfigure( chan );
+            ReConfigure( chan_array );
             DAQmxStartTask( task );
         }
     }
@@ -316,17 +381,17 @@ void NIdaq::PostRun(){
 }
 
 
-void NIdaq::ReConfigure( string input ){
+void NIdaq::ReConfigure( vector<string> input ){
 
     if( channels.empty() ){
         Print("ReConfigure is invoked before channels are configured.\n", ERR);
         return;
     }
-    if( mode==DAQmx_Val_ContSamps ){
+    if( nimode==DAQmx_Val_ContSamps ){
         Print("Warning: calling ReConfigure for continuous mode.\n", ERR);
     }
 
-    string chan_prefix = input.substr(0, 7);
+    string chan_prefix = input[0].substr(0, 7);
 
     if( CreateTask()<0 ){
         SetStatus(ERROR);   // Report error to polaris.
@@ -338,10 +403,11 @@ void NIdaq::ReConfigure( string input ){
         return;
     }
 
-    if( ConfigClock( mode, sample_freq, buff_per_chan) < 0 ){
+    if( ConfigClock( nimode, sample_freq, buff_per_chan) < 0 ){
         SetStatus(ERROR);
         return;
     }
+//    error = DAQmxCfgDigEdgeStartTrig( task, "/Dev1/pfi0", DAQmx_Val_Rising);
 }
 
 
@@ -350,6 +416,13 @@ int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
     return DAQmxCfgSampClkTiming( task, "", freq, DAQmx_Val_Rising, mod, buff_pchan);
 }
 
+
+
+int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
+    if( trig_mode!= "trig-ext" )
+        return 0;
+    return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), DAQmx_Val_Rising);
+}
 
 
 int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, vector<float> vmax){
@@ -389,50 +462,58 @@ int32 NIdaq::CreateTask(){
 
 
 
-vector<int> NIdaq::GetChannelsEnabled( string input ){
+vector<int> NIdaq::GetChannelsEnabled( vector<string> in ){
 
     vector<int> ret;    // Return vector that consists of the indices of channels enabled.
+    
+    for( vector<string>::iterator itr = in.begin(); itr!=in.end(); itr++){
 
-    // If a range of channels are specified with :, find out how many are in use.
-    if( input.find(":")==string::npos ){
-        ret.push_back( input.back()-'0' );
-        return ret;
-            // if no range is speciied in channels, the channel index is the last character
-    }
-    else{
-        // find out the channel number of the beginning channel
-        size_t delim = input.find(":");
-        size_t range0_low = input.find("ai");
-        size_t range0_cap = input.find("AI");
-            // check for both lower case and capital case.
+        string input = *itr;
 
-        size_t range0 = (range0_low!=string::npos) ? range0_low : range0_cap;
-            // now range0 is the beginning location of first analog input
-        if( range0==string::npos ){
-            return ret;
-        }
-
-        string sub0 = input.substr( range0+2, delim-range0-2);
-            // channel number is the second character since ai/AI up to the delim character
-
-        // find the ending channel number after :
-        string sub1;
-        size_t range1_low = input.find("ai", delim); // search from the delimiting character.
-        size_t range1_cap = input.find("AI", delim); // search from the delimiting character.
-        size_t range1 = ( range1_low!=string::npos ) ? range1_low : range1_cap;
-
-        if( range1==string::npos ){  // channel of the form Dev1/ai0:4
-            sub1 = input.substr( delim+1, input.size()-delim);
+        // If a range of channels are specified with :, find out how many are in use.
+        if( input.find(":")==string::npos ){
+            ret.push_back( input.back()-'0' );
+            // return ret;
+                // if no range is speciied in channels, the channel index is the last character
+                // when dealing with an array, do not return.
         }
         else{
-            sub1 = input.substr( range1+2, input.size()-delim);
-        }
+            // find out the channel number of the beginning channel
+            size_t delim = input.find(":");
+            size_t range0_low = input.find("ai");
+            size_t range0_cap = input.find("AI");
+                // check for both lower case and capital case.
 
-        // the beginning and ending index of channels are found. Fill the channels array.
-        int order = stoi(sub1) > stoi(sub0) ? 1 : -1;
-        for( int c = stoi(sub0); c!=stoi(sub1)+order; c+=order){
-            // in termination condition, order is added because the end is inclusive.
-            ret.push_back( c );
+            size_t range0 = (range0_low!=string::npos) ? range0_low : range0_cap;
+                // now range0 is the beginning location of first analog input
+            if( range0==string::npos ){
+                continue;
+                // return ret;
+            }
+
+            string sub0 = input.substr( range0+2, delim-range0-2);
+                // channel number is the second character since ai/AI up to the delim character
+
+            // find the ending channel number after :
+            string sub1;
+            size_t range1_low = input.find("ai", delim); // search from the delimiting character.
+            size_t range1_cap = input.find("AI", delim); // search from the delimiting character.
+            size_t range1 = ( range1_low!=string::npos ) ? range1_low : range1_cap;
+
+            if( range1==string::npos ){  // channel of the form Dev1/ai0:4
+                sub1 = input.substr( delim+1, input.size()-delim);
+            }
+            else{
+                sub1 = input.substr( range1+2, input.size()-delim);
+            }
+
+            // the beginning and ending index of channels are found. Fill the channels array.
+            int order = stoi(sub1) > stoi(sub0) ? 1 : -1;
+            for( int c = stoi(sub0); c!=stoi(sub1)+order; c+=order){
+                // in termination condition, order is added because the end is inclusive.
+                ret.push_back( c );
+//                cout << c << endl;
+            }
         }
     }
 
