@@ -13,6 +13,12 @@ extern "C" NIdaq* create_NIdaq( plrsController* c ){ return new NIdaq(c);}
 extern "C" void destroy_NIdaq( NIdaq* p ){ delete p;}
 
 
+extern "C" void PrintUsage(){
+    std::cout << "\t-f,\n\t\tPrefix of output file name.\n";
+    std::cout << "\t--event,\n\t\tNumber of events to record. Default is 2 billion.\n";
+    std::cout << "\t--comment,\n\t\tComment from commandline to record in the HDF5 output.\n\t\tPair of \" is needed if there is space in the comment.\n\n";
+}
+
 NIdaq::NIdaq( plrsController* ctrl) : plrsModuleDAQ( ctrl){
     buff_depth = 20;
         // NOTE: depth of FIFO buffer is set to be 20 by default.
@@ -88,6 +94,7 @@ void NIdaq::Configure(){
     // Create task
     // ****************************************************
 
+    Print("Creating NI task...\n", DETAIL);
     if( CreateTask()<0 ){
         Print("Failed to create NI new task.\n", ERR);
         SetStatus(ERROR);
@@ -114,6 +121,7 @@ void NIdaq::Configure(){
     // Configure input channel
     // ****************************************************
     
+    Print("Configuring channels...\n", DETAIL);
     error = ConfigChannel( chan_prefix, channels, Vmin, Vmax );
     if( error < 0 ){
         stringstream ss;
@@ -183,6 +191,7 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
+    Print("Configuring clock...\n", DETAIL);
     error = ConfigClock( nimode, sample_freq, buff_per_chan);
     if( error < 0 ){
         stringstream ss;
@@ -202,6 +211,7 @@ void NIdaq::Configure(){
     // ****************************************************
     // Configure trigger
     // ****************************************************
+    Print("Configuring HW trugger...\n", DETAIL);
     error = ConfigTrigger( trig_mode, trig_channel );
     if( error < 0 ){
         stringstream ss;
@@ -231,6 +241,7 @@ void NIdaq::Configure(){
     int id_self = ctrl->GetIDByName( this->GetModuleName() );
     int id_rec = next_addr;
 
+    Print("Allocating FIFO buffer...\n", DETAIL);
     for( int i=0; i<buff_depth; i++ ){
         
         // Create object to hold NI ADC configuration and data.
@@ -259,6 +270,7 @@ void NIdaq::Configure(){
 
         // Hand one copy to recorder to configure metadata. Send the rest to DAQ module's own FIFO buffer.
         if( i!=0 ){
+            Print("Sending empty data template to other modules...\n", DETAIL);
             PushToBuffer( id_self, foo );
         }
         else{
@@ -451,7 +463,9 @@ int32 NIdaq::ConfigChannel( string prefix, vector<int> ch, vector<float> vmin, v
 
 
 int32 NIdaq::CreateTask(){
+    Print("Creating task...\n", DEBUG);
     int32 err = DAQmxCreateTask( "", &task);
+    Print("Task created.\n", DEBUG);
     if( err<0 ){
         stringstream msg;
         msg << "Cannot create task due to error " << error << "\n";

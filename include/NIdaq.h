@@ -147,4 +147,6 @@ extern "C" NIdaq* create_NIdaq( plrsController* c );
 extern "C" void destroy_NIdaq( NIdaq* p );
 
 
+extern "C" void PrintUsage();
+
 #endif
