@@ -29,10 +29,19 @@ LDFLAGS += -L/usr/lib64 -lhdf5 -lhdf5_hl -lhdf5_cpp
 # CFLAGS += -I/usr/local/hdf5/include/ -I/usr/include
 # LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl -lhdf5_cpp
 
-all : lib test_h5
+all : lib test
+
+
+test : test_h5 test_type
+
 
 test_h5 : test/test_hdf5.o $(OBJ_FILES)
 	$(CC) -o $@ $^ ${LDFLAGS}
+
+
+test_type : test/test_type.o $(OBJ_FILES)
+	$(CC) -o $@ $^ ${LDFLAGS}
+
 
 hdf5_test.o : test/test_hdf5.cpp
 	@$(CC) $(CFLAGS) -c $^ -o $@

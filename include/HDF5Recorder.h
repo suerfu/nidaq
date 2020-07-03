@@ -154,6 +154,16 @@ private:
     }
 
     uint64_t GetSeriesNumber( int facility_num, const time_t& tmstamp);
+
+
+private:
+    // functions to determine/guess the type of parameters
+    
+    char GetType( vector<string> s );
+
+    char GetType( string s );
+        //!< returns i if string is an integer, f if float, s if string.
+
 };
 
 extern "C" HDF5Recorder* create_HDF5Recorder( plrsController* c);

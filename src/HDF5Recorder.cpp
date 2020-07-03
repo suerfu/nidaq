@@ -312,15 +312,12 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
     Print( "Added adc_conversion_factor.\n", DEBUG);
 
-    AddAttribute( "/"+group_name, "adc_connections", GetConfigParser()->GetStrArray("/"+group_name+"/adc_connections") );
-//  The following code is prone to Seg fault if wrong numbers of parameters are specified in the config file.
-//    vector<string> adc_conn = GetConfigParser()->GetStrArray("/"+group_name+"/adc_connections");
-//    if( adc_conn.size()>0 ){
-//        dim[1] = 2;
-//        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
-//    }
-
-    Print( "Added adc_connections.\n", DEBUG);
+    for( unsigned int i=0; i<header->GetChannelIndex().size(); i++ ){
+        stringstream ss;
+        ss << "connection" << header->GetChannelIndex()[i];
+        AddAttribute( "/"+group_name, ss.str(), GetConfigParser()->GetStrArray("/"+group_name+"/"+ss.str()) );
+        Print( "Added " + ss.str() + "\n", DEBUG);
+    }
     
     Print( "Group attributes configured.\n", DEBUG);
 
@@ -333,9 +330,40 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
 
     h5man->OpenGroup( "/"+group_name );
 
-    AddAttribute( "/"+group_name, "device_name_list", GetConfigParser()->GetStrArray("/"+group_name+"/device_name_list") );
     AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
     AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
+
+    for( unsigned int i=0; i<header->GetChannelIndex().size(); i++ ){
+        stringstream ss;
+        ss << "connection" << header->GetChannelIndex()[i];
+        AddAttribute( "/"+group_name, ss.str(), GetConfigParser()->GetStrArray("/"+group_name+"/"+ss.str()) );
+        Print( "Added " + ss.str() + "\n", DEBUG);
+    }
+
+    map<string, vector<string>> parlist = GetConfigParser()->GetListOfParameters( "/"+group_name+"/" );
+    for( map<string, vector<string>>::iterator itr = parlist.begin(); itr!=parlist.end(); itr++ ){
+        string full = itr->first;
+        string dir = full.substr( 0, full.rfind('/')+1 );
+        string param = full.substr( full.rfind('/')+1, string::npos );
+            // +1 after rfind is to include ending / in directory name while exclude it at the beginning of the parameter name.
+        Print( dir + ' ' + param + "\n", ERR);
+        
+        vector<string> attr_array = GetConfigParser()->GetStrArray("/"+group_name+"/"+param);
+        switch( GetType( attr_array) ){
+            
+            case 'i':
+                AddAttribute( "/"+group_name, param, GetConfigParser()->GetIntArray("/"+group_name+"/"+param) );
+                break;
+
+            case 'f':
+                AddAttribute( "/"+group_name, param, GetConfigParser()->GetFloatArray("/"+group_name+"/"+param) );
+                break;
+
+            default:
+                AddAttribute( "/"+group_name, param, GetConfigParser()->GetStrArray("/"+group_name+"/"+param) );
+        }
+    }
+//    AddAttribute( "/"+group_name, "device_name_list", GetConfigParser()->GetStrArray("/"+group_name+"/device_name_list") );
 
 //  The following code is prone to Seg fault if wrong numbers of parameters are specified in the config file.
 //  adc_con is previously defined, and is currently temporarily not supported.
@@ -343,7 +371,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
 //        dim[1] = 2;
 //        AddAttribute( "/"+group_name, "adc_connections", adc_conn, rank, dim);
 //    }
-
+/*
     vector<string> param_list;
     param_list.push_back( "tes_bias" );
     param_list.push_back( "squid_bias" );
@@ -365,7 +393,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     for( vector<string>::iterator itr = param_list.begin(); itr!=param_list.end(); itr++ ){
         AddAttribute( "/"+group_name, *itr, GetConfigParser()->GetIntArray("/"+group_name+"/"+*itr) );
     }
-
+*/
     Print( "Group attributes configured.\n", DEBUG);
 
     return;
@@ -446,4 +474,57 @@ int HDF5Recorder::GetNextModuleID(){
 }
 
 
+char HDF5Recorder::GetType( vector<string> s ){
+    char ret = 'i';
+    for( vector<string>::iterator itr = s.begin(); itr!=s.end(); itr++){
+        char t = GetType( *itr );
+        if( t=='s' ){
+            ret = t;
+            break;
+        }
+        else if( t=='f' ){
+            ret = t;
+        }
+    }
+    return ret;
+}
 
+
+
+char HDF5Recorder::GetType( string s ){
+
+    int dig_counter = 0;
+        // digit counter
+    int dec_counter = 0;
+        // decimal point counter
+    
+    for(string::iterator itr = s.begin(); itr!=s.end(); itr++){
+
+        // First if first character is minus sign, simply ignore it.
+        if( itr==s.begin() && *itr=='-' )
+            continue;
+
+        // Iterate. If there is non-digit, non-decimal point, return
+        else if( isdigit(*itr)==0 ){
+            if( *itr!='.' )
+                return 's';
+            else
+                dec_counter++;
+        }
+
+        else
+            dig_counter++;
+    }
+
+    if( dig_counter>0  ){
+        if( dec_counter==0 )
+            return 'i';
+        else if( dec_counter==1 )
+            return 'f';
+        else
+            return 's';
+    }
+    else
+        return 's';
+
+}

@@ -5,7 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
-
+#include <cctype>
 
 extern "C" NIdaq* create_NIdaq( plrsController* c ){ return new NIdaq(c);}
 
@@ -533,4 +533,6 @@ vector<int> NIdaq::GetChannelsEnabled( vector<string> in ){
 
     return ret;
 }
+
+
 
