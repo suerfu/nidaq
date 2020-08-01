@@ -346,21 +346,18 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
         string dir = full.substr( 0, full.rfind('/')+1 );
         string param = full.substr( full.rfind('/')+1, string::npos );
             // +1 after rfind is to include ending / in directory name while exclude it at the beginning of the parameter name.
-        Print( dir + ' ' + param + "\n", ERR);
         
         vector<string> attr_array = GetConfigParser()->GetStrArray("/"+group_name+"/"+param);
         switch( GetType( attr_array) ){
-            
             case 'i':
                 AddAttribute( "/"+group_name, param, GetConfigParser()->GetIntArray("/"+group_name+"/"+param) );
                 break;
-
             case 'f':
                 AddAttribute( "/"+group_name, param, GetConfigParser()->GetFloatArray("/"+group_name+"/"+param) );
                 break;
-
             default:
                 AddAttribute( "/"+group_name, param, GetConfigParser()->GetStrArray("/"+group_name+"/"+param) );
+                break;
         }
     }
 //    AddAttribute( "/"+group_name, "device_name_list", GetConfigParser()->GetStrArray("/"+group_name+"/device_name_list") );
