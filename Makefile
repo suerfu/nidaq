@@ -6,7 +6,7 @@ NAME = nidaq
 LIBNAME = lib$(NAME).so
 
 
-CPP_FILES = $(wildcard src/*.cpp) 
+CPP_FILES = $(wildcard src/*.cpp h5man/src/*.cpp) 
 OBJ_FILES = $(patsubst %.cpp, %.o, $(CPP_FILES))
 
 CFLAGS = -Wall -std=c++0x -fPIC -I./include 
@@ -15,9 +15,6 @@ CFLAGS = -Wall -std=c++0x -fPIC -I./include
 CFLAGS += -I/usr/local/include/polaris
 LDFLAGS += -L/usr/local/lib -lpolaris
 
-# ROOT files
-#ROOT_FLAGS = #`root-config --cflags --glibs`
-
 # National Instruments
 CFLAGS += -D_POSIX_C_SOURCE=200809L
 LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
@@ -25,6 +22,10 @@ LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lm -lnidaqmx
 # HDF5 flags
 CFLAGS += -I/usr/include
 LDFLAGS += -L/usr/lib64 -lhdf5 -lhdf5_hl -lhdf5_cpp
+
+# HDF5 manager
+CFLAGS += -I./h5man/include
+
 # below is for C version
 # CFLAGS += -I/usr/local/hdf5/include/ -I/usr/include
 # LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl -lhdf5_cpp
