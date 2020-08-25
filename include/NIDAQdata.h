@@ -87,6 +87,18 @@ public:
         //!< \return The mode of data acquisition.
         //!< The integer representation will be developed and made official later.
 
+    void SetTrigMode( string mode ){ trig_mode = mode; }
+
+    string GetTrigMode(){ return trig_mode;}
+
+    void SetTrigChannel( string tc ){ trig_channel = tc; }
+
+    string GetTrigChannel(){ return trig_channel; }
+
+    void SetTrigPeriod( int a ){ trig_period = a; }
+
+    int GetTrigPeriod(){ return trig_period; }
+
     float64** GetCalCoeff(){ return cal_coeff_mat;}
         //!< \return The pointer to memory where calibration coefficients for enabled channels are stored.
         //!< The calibration coefficients are coefficients of a 3rd order polynomial.
@@ -122,6 +134,17 @@ private:
     int data_mode;
         //!< Mode of data taking. Continuous, finite, triggered, etc.
         //!< Currently, only continuous and finite are supported.
+    
+    string trig_mode;
+        //!< Trigger mode.
+        //!< Will be specified in more detail in the future.
+
+    string trig_channel;
+        //!< Channel used to accept trigger.
+
+    int trig_period;
+        //!< Trigger period in ms.
+        //!< Internally inside the program, it will be multiplied by 1000 to increase precision.
 
     unsigned int nchan;
         //!< Number of channels enabled.

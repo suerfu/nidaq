@@ -55,10 +55,10 @@ void NIdaq::Configure(){
     // Find out max run number. Default to 2 billion
     // ***********************************
     
-    max_evt = cparser->GetInt("/cmdl/event", 0);
+    max_evt = GetConfigParser()->GetInt("/cmdl/event", 0);
         // max_evt is unsigned int. Do not set it to negative values.
     if( max_evt==0 )
-        max_evt = cparser->GetInt("/"+modadc+"/event", 0);
+        max_evt = GetConfigParser()->GetInt("/"+modadc+"/event", 0);
     if( max_evt==0 )
         max_evt = 2000000000;
 
@@ -69,7 +69,7 @@ void NIdaq::Configure(){
 
     // Original channel string specified by the user.
     // If channel is not specified, report error and exit.
-    chan_array = cparser->GetStrArray("/"+modadc+"/channel");
+    chan_array = GetConfigParser()->GetStrArray("/"+modadc+"/channel");
     if( chan_array.empty() ){
         Print( "Cannot find /"+modadc+"/channel.\n", ERR);
         SetStatus(ERROR);
@@ -106,8 +106,8 @@ void NIdaq::Configure(){
     // Configure ranges for input channel
     // ****************************************************
     
-    Vmin = cparser->GetFloatArray("/"+modadc+"/Vmin");
-    Vmax = cparser->GetFloatArray("/"+modadc+"/Vmax");
+    Vmin = GetConfigParser()->GetFloatArray("/"+modadc+"/Vmin");
+    Vmax = GetConfigParser()->GetFloatArray("/"+modadc+"/Vmax");
 
     // if no value is specified, report error.
     if( Vmin.size()!=channels.size() || Vmax.size()!=channels.size() ){
@@ -142,10 +142,10 @@ void NIdaq::Configure(){
     // This is common for all channels.
     // ****************************************************
     
-    sample_freq = cparser->GetFloat("/"+modadc+"/sample_rate", 1000.);
-    buff_per_chan = cparser->GetFloat("/"+modadc+"/nb_samples", 10000);
+    sample_freq = GetConfigParser()->GetFloat("/"+modadc+"/sample_rate", 1000.);
+    buff_per_chan = GetConfigParser()->GetFloat("/"+modadc+"/nb_samples", 10000);
 
-    trig_mode = cparser->GetString("/"+modadc+"/data_mode", "");
+    trig_mode = GetConfigParser()->GetString("/"+modadc+"/data_mode", "");
 
     // First check if mode is specified.
     if( trig_mode=="" ){
@@ -162,7 +162,7 @@ void NIdaq::Configure(){
         nimode = DAQmx_Val_FiniteSamps;
         // For ext mode, need the trigger input channel.
         if( trig_mode=="trig-ext" ){
-            trig_channel = cparser->GetString( "/"+modadc+"/trigger_channel", "");
+            trig_channel = GetConfigParser()->GetString( "/"+modadc+"/trig_channel", "");
             if( trig_channel=="" ){
                 Print( "Trigger channel not specified.\n", ERR);
                 SetStatus(ERROR);
@@ -171,7 +171,7 @@ void NIdaq::Configure(){
         }
         // For int mode, need the period.
         else if( trig_mode=="trig-int" ){
-            trig_period_us = cparser->GetInt( "/"+modadc+"/trigger_period_us", 0);
+            trig_period_us = 1000*GetConfigParser()->GetInt( "/"+modadc+"/trig_period", 0);
             if( trig_period_us==0 ){
                 Print( "Trigger period not specified.\n", ERR);
                 SetStatus(ERROR);
@@ -250,6 +250,9 @@ void NIdaq::Configure(){
         foo->SetClockFrequency( sample_freq );
         foo->SetVoltageRange( Vmin, Vmax);
         foo->SetDataMode( nimode );
+        foo->SetTrigMode( trig_mode );
+        foo->SetTrigPeriod( trig_period_us );
+        foo->SetTrigChannel( trig_channel );
 
         // Get device calibration information and write them onto the NIDAQ object.
         for( unsigned int j=0; j<channels.size(); j++){

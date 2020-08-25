@@ -3,6 +3,7 @@
 
 #include <ctime>
 #include <vector>
+#include <set>
 
 #include <unistd.h>
 
@@ -235,25 +236,67 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     // ================================================
     Print( "Configuring global attributes...\n", DEBUG);
 
+    std::set<string> no_reload;
+
+    // First add a few special attributes that should not be over-written.
+    // DAQ and software version
     AddAttribute( "/daq_version", daq_version );
+    no_reload.insert( "daq_version" );
+
     AddAttribute( "/format_version", format_version );
+    no_reload.insert( "format_version" );
 
-    string comment_cfg =  GetConfigParser()->GetString("/comment");
-    string comment_cmd =  GetConfigParser()->GetString("/cmdl/comment");
+    // User comment
+    string comment_cfg =  GetConfigParser()->GetString( "/comment" );
+    string comment_cmd =  GetConfigParser()->GetString( "/cmdl/comment" );
     AddAttribute( "/comment", comment_cfg+" "+comment_cmd );
+    no_reload.insert( "comment" );
 
-    AddAttribute( "/facility", facility_num );
-    AddAttribute( "/run_type", facility_num );  // NOTE: load from config.
+    // Dump number in the series.
     AddAttribute( "/dump_num", dump_index );
+    no_reload.insert( "dump_num" );
+
+    // timestamp
     if( dump_index==0 )
         AddAttribute( "/timestamp", timestamp_g );
     else{
         timestamp_l = ctrl->GetTimeStamp();
         AddAttribute( "/timestamp", timestamp_l );
     }
+    no_reload.insert( "timestamp" );
+
     AddAttribute( "/series_num", GetSeriesNumber( facility_num, timestamp_g) );
+    no_reload.insert( "series_num" );
+
+    // Next load other specified attributes. 
+    map<string, vector<string>> parlist = GetConfigParser()->GetListOfParameters( "/" );
+    for( map<string, vector<string>>::iterator itr = parlist.begin(); itr!=parlist.end(); itr++ ){
+        string full = itr->first;
+        string dir = full.substr( 0, full.rfind('/')+1 );
+        string param = full.substr( full.rfind('/')+1, string::npos );
+            // +1 after rfind is to include ending / in directory name while exclude it at the beginning of the parameter name.
+        
+        // Check if the specified parameter is a system attribute. If so, skip.
+        if( no_reload.find(param)!=no_reload.end() ){
+            Print( param + " under " + full + " conflicts with a system attribute. It will not be loaded.\n", DEBUG);
+        }
+           
+        vector<string> attr_array = GetConfigParser()->GetStrArray( "/" + param );
+        switch( GetType( attr_array) ){
+            case 'i':
+                AddAttribute( "/", param, GetConfigParser()->GetIntArray( "/"+param ) );
+                break;
+            case 'f':
+                AddAttribute( "/", param, GetConfigParser()->GetFloatArray( "/"+param ) );
+                break;
+            default:
+                AddAttribute( "/", param, GetConfigParser()->GetStrArray( "/"+param ) );
+                break;
+        }
+    }
 
     Print( "Global attributes configured.\n", DEBUG);
+    no_reload.clear();
 
     // ================================================
     // Attributes under ADC Group
@@ -273,9 +316,18 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     Print( "Added nb_samples.\n", DEBUG);
     AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
     Print( "Added adc_channel_indices.\n", DEBUG);
-    AddAttribute( "/"+group_name, "data_mode", header->GetDataMode() );
+
+    AddAttribute( "/"+group_name, "data_mode", header->GetTrigMode() );
     Print( "Added data_mode.\n", DEBUG);
-    // Need to update number of event later
+    if( header->GetTrigMode()=="trig-ext" ){
+        AddAttribute( "/"+group_name, "trig_channel", header->GetTrigChannel() );
+        Print( "Added trig_channel.\n", DEBUG);
+    }
+    else if( header->GetTrigMode()=="trig-int" ){
+        AddAttribute( "/"+group_name, "trig_period", header->GetTrigPeriod() );
+        Print( "Added trig_period.\n", DEBUG);
+    }
+
     AddAttribute( "/"+group_name, "adc_name", GetConfigParser()->GetStrArray("/"+group_name+"/adc_name") );
     Print( "Added adc_name.\n", DEBUG);
 
@@ -340,7 +392,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
         Print( "Added " + ss.str() + "\n", DEBUG);
     }
 
-    map<string, vector<string>> parlist = GetConfigParser()->GetListOfParameters( "/"+group_name+"/" );
+    parlist = GetConfigParser()->GetListOfParameters( "/"+group_name+"/" );
     for( map<string, vector<string>>::iterator itr = parlist.begin(); itr!=parlist.end(); itr++ ){
         string full = itr->first;
         string dir = full.substr( 0, full.rfind('/')+1 );
