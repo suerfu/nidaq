@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <iostream>
 #include <vector>
-
+#include <string>
 #include <NIDAQmx.h>
 
 using std::cout;
 using std::endl;
 using std::vector;
+using std::string;
 
 //! Object to hold data/information obtained from National Instrument ADC card.
 
