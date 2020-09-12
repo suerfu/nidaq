@@ -14,7 +14,8 @@ extern "C" void destroy_NIdaq( NIdaq* p ){ delete p;}
 
 
 extern "C" void PrintUsage(){
-    std::cout << "\t-f,\n\t\tPrefix of output file name.\n";
+    std::cout << "\t--file,\n\t\tWhen filename is specified, it takes the format of filename_xxxx where xxxx is incremented when filesize exceeds the limit.\n";
+    std::cout << "\t--prefix,\n\t\tPrefix of output file name. When specified, it takes particular format.\n";
     std::cout << "\t--event,\n\t\tNumber of events to record. Default is 2 billion.\n";
     std::cout << "\t--comment,\n\t\tComment from commandline to record in the HDF5 output.\n\t\tPair of \" is needed if there is space in the comment.\n\n";
 }

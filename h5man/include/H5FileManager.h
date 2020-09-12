@@ -195,7 +195,7 @@ bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& t
     catch( H5::FileIException error ){
         #ifdef debug
             std::cout << "Failed due to FileIException. " << std::endl;
-            error.printError();
+            error.printErrorStack();
         #endif
         //std::cout << error.getDetailMsg() << std::endl;
         return false;
@@ -310,7 +310,7 @@ bool H5FileManager::AddAttribute( string app_name, string attr_name, const vecto
         attr.write( datatype, attr_vec.data());
     }
     catch( H5::AttributeIException error){
-        error.printError();
+        error.printErrorStack();
         return false;
     }
 

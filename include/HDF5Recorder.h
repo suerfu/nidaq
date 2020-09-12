@@ -70,10 +70,10 @@ private:
         //!< Retrieves the ID/address of next module.
         //!< If not specified, it returns the module's own address.
 
-    string GetFilePrefix();
+    string GetFilePrefix( );
         //!< Get file prefix from config file or commandline, with commandline having higher priority.
 
-    string GetFileName( string prefix, int fn, const time_t& tm_stamp,  int dmp_id );
+    string GetFileName( string prefix, int facilitynumber,  const time_t& tm_stamp,  int dmp_id );
         //!< Concatenates the dump index and extention to the prefix and returns it.
         //!< The filename is Prefix_Ix_DYYYYMMDD_THHMMSS_Fxxxx.hdf5
 

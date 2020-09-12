@@ -18,7 +18,7 @@ const string HDF5Recorder::format_version = "1.0.0";
 
 HDF5Recorder::HDF5Recorder( plrsController* c) : plrsStateMachine(c){
 
-    facility_num = 0;   // default facility number
+    facility_num = -1;  // default facility number
 
     dump_index = 1;     // Dump index start counting from 1.
 
@@ -67,14 +67,16 @@ void HDF5Recorder::Configure(){
     // Get output file name.
     // =========================================================
 
-    // Get filre prefix from either commandline or configuration file.
-    file_prefix = GetFilePrefix();
+    // Get file prefix from either commandline or configuration file.
+    // If filename is specified directly, then override the prefix format.
+    
+    // Get Facility ID
+    facility_num = GetConfigParser()->GetInt("facility", facility_num);
+
+    file_prefix = GetFilePrefix( );
 
     // Get global timestamp to be used in the series of dumps.
     timestamp_g = ctrl->GetTimeStamp();
-
-    // Get Facility ID
-    facility_num = GetConfigParser()->GetInt("facility", facility_num);
 
     // Concatenates and get the file name.
     filename = GetFileName( file_prefix, facility_num, timestamp_g, dump_index );
@@ -160,7 +162,7 @@ void HDF5Recorder::Run(){
         bytes_written = 0;
         dump_index++;
 
-        filename = GetFileName( file_prefix, facility_num, timestamp_g, dump_index );
+        filename = GetFileName( file_prefix, facility_num,  timestamp_g, dump_index );
         
         Print("Opening file "+filename+" for output\n", INFO);
         if( h5man->OpenFile( filename, "w+")==false ){
@@ -456,7 +458,8 @@ uint64_t HDF5Recorder::GetSeriesNumber( int facility_num, const time_t& tmstamp)
     struct tm tm = *localtime( &tmstamp );
 
     stringstream ss;
-    ss << facility_num;
+    if( facility_num>= 0)
+        ss << facility_num;
     ss << tm.tm_year+1900;
     ss << setfill('0') << setw(2) << tm.tm_mon+1;
     ss << setfill('0') << setw(2) << tm.tm_mday;
@@ -470,37 +473,51 @@ uint64_t HDF5Recorder::GetSeriesNumber( int facility_num, const time_t& tmstamp)
 
 
 string HDF5Recorder::GetFileName( string prefix, int fn, const time_t& t, int index ){
-
-    struct tm tm = *localtime(&t);
-
+    
     stringstream ss;
     ss << file_prefix;
-    ss << "_I" << fn;
-        // Facility ID
-    ss << "_D" << tm.tm_year+1900;
-    ss << setfill('0') << setw(2) << tm.tm_mon+1 << setfill('0') << setw(2) << tm.tm_mday;
-        // Date
-    ss << "_T" << setfill('0') << setw(2) << tm.tm_hour;
-    ss << setfill('0') << setw(2) << tm.tm_min;
-    ss << setfill('0') << setw(2) << tm.tm_sec;
-        // Time
-    ss <<"_F" << setfill('0') << setw(4) << index;
-        // Dump number
-    ss << ".hdf5";
-        // File extension.
 
+    if( GetConfigParser()->Find("/cmdl/file") ){
+        ss << "_" << setfill('0') << setw(4) << index << ".hdf5";
+    }
+    else{
+        struct tm tm = *localtime(&t);
+
+        if( fn>=0 )
+            ss << "_I" << fn;
+        ss << "_D" << tm.tm_year+1900;
+        ss << setfill('0') << setw(2) << tm.tm_mon+1 << setfill('0') << setw(2) << tm.tm_mday;
+            // Date
+        ss << "_T" << setfill('0') << setw(2) << tm.tm_hour;
+        ss << setfill('0') << setw(2) << tm.tm_min;
+        ss << setfill('0') << setw(2) << tm.tm_sec;
+            // Time
+        ss <<"_F" << setfill('0') << setw(4) << index;
+            // Dump number
+        ss << ".hdf5";
+            // File extension.
+    }
     return ss.str();
 }
 
 
 
-string HDF5Recorder::GetFilePrefix(){
+string HDF5Recorder::GetFilePrefix( ){
 
-    if( GetConfigParser()->Find("/cmdl/f") )
-        file_prefix = GetConfigParser()->GetString( "/cmdl/f", "");
+    // First top priority for explicitly specified filename
+    if( GetConfigParser()->Find("/cmdl/file") ){
+        return GetConfigParser()->GetString("/cmdl/file");
+    }
+
+    if( GetConfigParser()->Find("/cmdl/prefix") )
+        file_prefix = GetConfigParser()->GetString( "/cmdl/prefix", "");
     else
         file_prefix = GetConfigParser()->GetString( "/prefix", "Default");
-    return file_prefix;
+
+    stringstream ss;
+    ss << file_prefix;
+    return ss.str();
+
 }
 
 
