@@ -70,6 +70,8 @@ private:
     int buff_per_chan;          //!< Buffer size per channel (1K, 1M), which is also number of samples per channel.
 
     string trig_mode;           //!< Trigger mode(cont, trig-ext, trig-int).
+                                //!< Reference on trigger can be found at
+                                //!< https://documentation.help/NI-DAQmx-C-Functions/DAQmxCfgDigEdgeRefTrig.html
     
     int32 nimode;               //!< Mode of operation for the ADC card (continuous, finite).
 
@@ -77,6 +79,11 @@ private:
 
     string trig_channel;        //!< Input channel for external trigger signal.
 
+    bool trig_polarity;         //!< The polarity/slope used for external or threshold trigger.
+                                //!< True corresponds to trigger upon positive polarity.
+    float trig_threshold;       //!< Threshold for analog trigger. Value is in the unit of measurement (Volt), not ADC count.
+
+    int pre_trig_sample;        //!< Number of samples to record before trigger.
 
     int32 error;                //!< Error code returned by NI.
 

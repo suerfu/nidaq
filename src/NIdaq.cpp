@@ -159,15 +159,30 @@ void NIdaq::Configure(){
         nimode = DAQmx_Val_ContSamps;
     }
     // Finite mode, check if external trigger or internal software trigger
-    else if( trig_mode=="trig-ext" || trig_mode=="trig-int" ){
+    else if( trig_mode=="trig-ext" || trig_mode=="trig-int" || trig_mode=="threshold" ){
         nimode = DAQmx_Val_FiniteSamps;
-        // For ext mode, need the trigger input channel.
-        if( trig_mode=="trig-ext" ){
+        // For ext mode or the threshold mode, need the trigger input channel.
+        if( trig_mode=="trig-ext" || trig_mode=="threshold" ){
             trig_channel = GetConfigParser()->GetString( "/"+modadc+"/trig_channel", "");
             if( trig_channel=="" ){
                 Print( "Trigger channel not specified.\n", ERR);
                 SetStatus(ERROR);
                 return;
+            }
+            trig_polarity = GetConfigParser()->GetBool("/"+modadc+"/trig_polarity", true);
+                // trigger polarity, true for rising edge, false for falling edge.
+            if( trig_mode=="threshold"){
+                if( GetConfigParser()->Find("/"+modadc+"/trig_threshold")==false ){
+                    Print( "Trigger threshold not specified.\n", ERR);
+                    SetStatus(ERROR);
+                    return;
+                }
+                trig_threshold = GetConfigParser()->GetFloat("/"+modadc+"/trig_threshold", 0.);
+                pre_trig_sample = GetConfigParser()->GetInt("/"+modadc+"/pre_trig_sample", 0);
+                Print( "Internal threshold trigger mode will be used.\n", DEBUG);
+            }
+            else{
+                Print( "External trigger mode (TTL) will be used.\n", DEBUG);
             }
         }
         // For int mode, need the period.
@@ -178,6 +193,7 @@ void NIdaq::Configure(){
                 SetStatus(ERROR);
                 return;
             }
+            Print( "Internal trigger mode will be used.\n", DEBUG);
         }
     }
     else{
@@ -274,10 +290,10 @@ void NIdaq::Configure(){
 
         // Hand one copy to recorder to configure metadata. Send the rest to DAQ module's own FIFO buffer.
         if( i!=0 ){
-            Print("Sending empty data template to other modules...\n", DETAIL);
             PushToBuffer( id_self, foo );
         }
         else{
+            Print("Sending empty data template to other modules...\n", DETAIL);
             PushToBuffer( id_rec, foo );
         }
     }
@@ -334,11 +350,15 @@ void NIdaq::Run(){
         return;
 
     // In finite sample mode, first wait and check if ready.
-    if( nimode==DAQmx_Val_FiniteSamps ){   
+    if( nimode==DAQmx_Val_FiniteSamps ){
         bool32 done = false;
         do{
             DAQmxIsTaskDone( task, &done);
         }while( GetState()==RUN && done==false );
+
+        // If exit the while loop not due to event ready, terminate.
+        if( done==false )
+            return;
     }
 
     // First cast void* to something usable
@@ -383,8 +403,11 @@ void NIdaq::Run(){
         else{
             // In finite sample mode, hardware setting is not kept between different runs. Need to start over.
             DAQmxClearTask( task );
-            ReConfigure( chan_array );
-            DAQmxStartTask( task );
+
+            if( GetState()==RUN ){
+                ReConfigure( chan_array );
+                DAQmxStartTask( task );
+            }
         }
     }
 }
@@ -423,7 +446,10 @@ void NIdaq::ReConfigure( vector<string> input ){
         SetStatus(ERROR);
         return;
     }
-//    error = DAQmxCfgDigEdgeStartTrig( task, "/Dev1/pfi0", DAQmx_Val_Rising);
+    if( ConfigTrigger( trig_mode, trig_channel ) < 0 ){
+        SetStatus(ERROR);
+        return;
+    }
 }
 
 
@@ -435,9 +461,27 @@ int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
 
 
 int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
-    if( trig_mode!= "trig-ext" )
+
+    if( trig_mode!= "trig-ext" || trig_mode!="threshold" )
         return 0;
-    return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), DAQmx_Val_Rising);
+
+    Print( "Configuring trigger with "+trig_channel, DEBUG);
+
+    int32_t slope = trig_polarity ? DAQmx_Val_RisingSlope : DAQmx_Val_FallingSlope;
+
+    if( trig_mode=="trig-ext"){
+        if( pre_trig_sample==0 )
+            return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), slope);
+        else
+            return DAQmxCfgDigEdgeRefTrig( task, trig_channel.c_str(), slope, pre_trig_sample);
+    }
+    else if( trig_mode=="threshold"){
+        if( pre_trig_sample==0 )
+            return DAQmxCfgAnlgEdgeStartTrig( task, trig_channel.c_str(), slope, trig_threshold );
+        else
+            return DAQmxCfgAnlgEdgeRefTrig( task, trig_channel.c_str(), slope, trig_threshold, pre_trig_sample );
+    }
+    return 0;
 }
 
 
