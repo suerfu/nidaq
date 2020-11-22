@@ -147,7 +147,7 @@ void NIdaq::Configure(){
     buff_per_chan = GetConfigParser()->GetFloat("/"+modadc+"/nb_samples", 10000);
 
     trig_mode = GetConfigParser()->GetString("/"+modadc+"/data_mode", "");
-
+    
     // First check if mode is specified.
     if( trig_mode=="" ){
         Print( "/"+modadc+"/mode not specified.\n", ERR);
@@ -172,6 +172,7 @@ void NIdaq::Configure(){
             trig_polarity = GetConfigParser()->GetBool("/"+modadc+"/trig_polarity", true);
                 // trigger polarity, true for rising edge, false for falling edge.
             if( trig_mode=="threshold"){
+                Print("Configuring trigger threshold and pre-trigger samples...\n", DEBUG);
                 if( GetConfigParser()->Find("/"+modadc+"/trig_threshold")==false ){
                     Print( "Trigger threshold not specified.\n", ERR);
                     SetStatus(ERROR);
@@ -462,7 +463,7 @@ int32 NIdaq::ConfigClock( int32 mod, float freq, float buff_pchan ){
 
 int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
 
-    if( trig_mode!= "trig-ext" || trig_mode!="threshold" )
+    if( trig_mode!= "trig-ext" && trig_mode!="threshold" )
         return 0;
 
     Print( "Configuring trigger with "+trig_channel, DEBUG);
@@ -478,8 +479,10 @@ int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
     else if( trig_mode=="threshold"){
         if( pre_trig_sample==0 )
             return DAQmxCfgAnlgEdgeStartTrig( task, trig_channel.c_str(), slope, trig_threshold );
-        else
+        else{
             return DAQmxCfgAnlgEdgeRefTrig( task, trig_channel.c_str(), slope, trig_threshold, pre_trig_sample );
+            cout << "Configuring threshold trigger with " << trig_threshold << "and pre_trig_sample " << pre_trig_sample << endl;
+        }
     }
     return 0;
 }
