@@ -9,7 +9,7 @@ LIBNAME = lib$(NAME).so
 CPP_FILES = $(wildcard src/*.cpp h5man/src/*.cpp) 
 OBJ_FILES = $(patsubst %.cpp, %.o, $(CPP_FILES))
 
-CFLAGS = -Wall -std=c++0x -fPIC -I./include 
+CFLAGS = -Wall -std=c++0x -fPIC -I./include -I/usr/local/include
 
 # polaris files
 CFLAGS += -I/usr/include/polaris
