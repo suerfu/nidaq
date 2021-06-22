@@ -33,18 +33,18 @@ CFLAGS += -I./h5man/include
 all : lib test
 
 
-test : test_h5 test_type
+test : h5write
 
 
-test_h5 : test/test_hdf5.o $(OBJ_FILES)
+h5write : test/h5write.o $(OBJ_FILES)
 	$(CC) -o $@ $^ ${LDFLAGS}
 
 
-test_type : test/test_type.o $(OBJ_FILES)
-	$(CC) -o $@ $^ ${LDFLAGS}
+#test_type : test/test_type.o $(OBJ_FILES)
+#	$(CC) -o $@ $^ ${LDFLAGS}
 
 
-hdf5_test.o : test/test_hdf5.cpp
+h5write.o : test/h5write.cpp
 	@$(CC) $(CFLAGS) -c $^ -o $@
 
 lib : ./lib/$(LIBNAME)
