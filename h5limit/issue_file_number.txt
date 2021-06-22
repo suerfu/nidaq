@@ -1,0 +1,40 @@
+10:39:34      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0966.hdf5 for output
+10:39:35      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0967.hdf5 for output
+10:39:36      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0968.hdf5 for output
+10:39:37      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0969.hdf5 for output
+10:39:38      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0970.hdf5 for output
+10:39:39      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0971.hdf5 for output
+10:39:40      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0972.hdf5 for output
+10:39:41      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0973.hdf5 for output
+10:39:42      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0974.hdf5 for output
+10:39:43      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0975.hdf5 for output
+10:39:44      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0976.hdf5 for output
+10:39:45      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0977.hdf5 for output
+10:39:46      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0978.hdf5 for output
+10:39:47      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0979.hdf5 for output
+10:39:48      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0980.hdf5 for output
+10:39:49      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0981.hdf5 for output
+10:39:50      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0982.hdf5 for output
+10:39:51      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0983.hdf5 for output
+10:39:52      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0984.hdf5 for output
+10:39:53      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0985.hdf5 for output
+10:39:54      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0986.hdf5 for output
+10:39:55      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0987.hdf5 for output
+              recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0988.hdf5 for output
+10:39:56      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0989.hdf5 for output
+10:39:57      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0990.hdf5 for output
+10:39:58      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0991.hdf5 for output
+10:39:59      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0992.hdf5 for output
+10:40:00      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0993.hdf5 for output
+10:40:01      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0994.hdf5 for output
+10:40:02      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0995.hdf5 for output
+10:40:03      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0996.hdf5 for output
+10:40:04      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0997.hdf5 for output
+10:40:05      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0998.hdf5 for output
+10:40:06      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F0999.hdf5 for output
+10:40:07      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F1000.hdf5 for output
+10:40:08      recorder : Opening file ./h5limit/Migration_D20200921_T102336_F1001.hdf5 for output
+terminate called after throwing an instance of 'H5::FileIException'
+Aborted (core dumped)
+[suerfu@mckinseydaq nidaq]$ 
+
