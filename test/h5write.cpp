@@ -24,6 +24,7 @@
 #include <iostream>
 #endif
 using std::cout;
+using std::cin;
 using std::endl;
 #include <string>
 #include "H5Cpp.h"
@@ -271,25 +272,25 @@ int main (void)
    // catch failure caused by the H5File operations
    catch( FileIException error )
    {
-    error.printError();
+    //error.printError();
     return -1;
    }
    // catch failure caused by the DataSet operations
    catch( DataSetIException error )
    {
-    error.printError();
+    //error.printError();
     return -1;
    }
    // catch failure caused by the DataSpace operations
    catch( DataSpaceIException error )
    {
-    error.printError();
+    //error.printError();
     return -1;
    }
 
    char c;
    cout << "Press key to exit.\n";
-   cin >> c
+   cin >> c;
 
    return 0;
 }
