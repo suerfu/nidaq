@@ -109,6 +109,7 @@ bool H5FileManager::CloseGroup( const string& name){
     if( list_group.find( name )!=list_group.end() ){
         list_group[name]->close();
         delete list_group[name];
+        list_group[name] = 0;
         return true;
     }
     return false;
