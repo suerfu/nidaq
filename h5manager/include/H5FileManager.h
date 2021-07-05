@@ -195,7 +195,7 @@ bool H5FileManager::WriteData( PtrType* data, string name, const H5::DataType& t
     catch( H5::FileIException error ){
         #ifdef debug
             std::cout << "Failed due to FileIException. " << std::endl;
-            error.printError();
+            error.printErrorStack();
         #endif
         //std::cout << error.getDetailMsg() << std::endl;
         return false;
@@ -228,7 +228,7 @@ bool H5FileManager::WriteData( PtrType* data, const H5::DataType& type, H5::Data
 
 template< class D >
 bool H5FileManager::AddAttribute( string app_name, string attr_name, const vector<D>& attr_vec, const H5::DataType& datatype, int rank, unsigned int dim[] ){
-
+    
     if( !file_ptr )
         return false;
 
@@ -253,10 +253,11 @@ bool H5FileManager::AddAttribute( string app_name, string attr_name, const vecto
         return false;
     }
 
-    if( attr_vec.empty() )
+    if( attr_vec.empty() ){
         return false;
+    }
 
-    hsize_t* dims;
+    hsize_t* dims = 0;
     if( rank==1 ){
         dims = new hsize_t( attr_vec.size() );
     }
@@ -272,6 +273,7 @@ bool H5FileManager::AddAttribute( string app_name, string attr_name, const vecto
     }
     else{
         attr_ds = H5::DataSpace( rank, dims );
+        delete dims;
     }
 
     H5::Attribute attr;
@@ -308,9 +310,17 @@ bool H5FileManager::AddAttribute( string app_name, string attr_name, const vecto
 
     try{
         attr.write( datatype, attr_vec.data());
+        attr.close();
+
+        // If attribute belongs to a DataSet, then close it since it is opened in this function.
+        if( !file_attr && !group_attr ){
+            reinterpret_cast<H5::DataSet*>(foo)->close();
+            delete foo;
+            foo = 0;
+        }
     }
     catch( H5::AttributeIException error){
-        error.printError();
+        error.printErrorStack();
         return false;
     }
 

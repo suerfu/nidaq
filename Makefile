@@ -6,7 +6,7 @@ NAME = nidaq
 LIBNAME = lib$(NAME).so
 
 
-CPP_FILES = $(wildcard src/*.cpp h5man/src/*.cpp) 
+CPP_FILES = $(wildcard src/*.cpp h5manager/src/*.cpp) 
 OBJ_FILES = $(patsubst %.cpp, %.o, $(CPP_FILES))
 
 CFLAGS = -Wall -std=c++0x -fPIC -I./include -I/usr/local/include
@@ -24,7 +24,7 @@ CFLAGS += -I/usr/local/hdf5/include
 LDFLAGS += -L/usr/local/hdf5/lib -lhdf5 -lhdf5_hl -lhdf5_cpp
 
 # HDF5 manager
-CFLAGS += -I./h5man/include
+CFLAGS += -I./h5manager/include
 
 # below is for C version
 # CFLAGS += -I/usr/local/hdf5/include/ -I/usr/include

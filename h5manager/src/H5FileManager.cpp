@@ -46,7 +46,13 @@ bool H5FileManager::OpenFile( const string& name, const string& f){
     else if( f=="w+" )
         flag = H5F_ACC_TRUNC;
 
-    file_ptr = new H5::H5File( name.c_str(), flag);
+    try{
+        file_ptr = new H5::H5File( name.c_str(), flag);
+    }
+    catch( H5::FileIException err){
+        std::cout << "Error: " << err.getCDetailMsg() << std::endl;
+        return false;
+    }
     filename = name;
     return true;
 }
@@ -61,6 +67,7 @@ bool H5FileManager::CloseFile(){
         }
         list_group.clear();
         file_ptr->close();
+        delete file_ptr;
         file_ptr = 0;
         return true;
     }
@@ -101,6 +108,8 @@ bool H5FileManager::CloseGroup( const string& name){
 
     if( list_group.find( name )!=list_group.end() ){
         list_group[name]->close();
+        delete list_group[name];
+        list_group[name] = 0;
         return true;
     }
     return false;
