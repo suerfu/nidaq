@@ -476,7 +476,7 @@ int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
     if( trig_mode!= "trig-ext" && trig_mode!="threshold" )
         return 0;
 
-    Print( "Configuring trigger with "+trig_channel, DEBUG);
+    Print( "Configuring trigger with "+trig_channel + '\n', DEBUG);
 
     int32_t slope = trig_polarity ? DAQmx_Val_RisingSlope : DAQmx_Val_FallingSlope;
 
