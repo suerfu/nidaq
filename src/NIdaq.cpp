@@ -239,7 +239,7 @@ void NIdaq::Configure(){
     // ****************************************************
     // Configure trigger
     // ****************************************************
-    Print("Configuring HW trugger...\n", DETAIL);
+    Print("Configuring HW trigger...\n", DETAIL);
     error = ConfigTrigger( trig_mode, trig_channel );
     if( error < 0 ){
         stringstream ss;
@@ -476,14 +476,15 @@ int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
     if( trig_mode!= "trig-ext" && trig_mode!="threshold" )
         return 0;
 
-    Print( "Configuring trigger with "+trig_channel + '\n', DEBUG);
+    Print( "Trigger mode is "+trig_mode + "\n", DEBUG);
+    Print( "Configuring trigger with "+trig_channel + "\n", DEBUG);
 
     int32_t slope = trig_polarity ? DAQmx_Val_RisingSlope : DAQmx_Val_FallingSlope;
 
     if( trig_mode=="trig-ext"){
         
         if( pre_trig_sample==0 ){
-            Print( "Configuring external trigger", DEBUG);
+            Print( "Configuring external trigger with no pre-trigger sample", DEBUG);
             return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), slope);
         }
         else{
