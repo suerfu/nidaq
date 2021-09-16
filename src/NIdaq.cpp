@@ -180,12 +180,15 @@ void NIdaq::Configure(){
                 // trigger polarity, true for rising edge, false for falling edge.
             
             if( trig_mode=="threshold"){
+                
                 Print("Configuring trigger threshold and pre-trigger samples...\n", DEBUG);
+                
                 if( GetConfigParser()->Find("/"+modadc+"/trig_threshold")==false ){
                     Print( "Trigger threshold not specified.\n", ERR);
                     SetStatus(ERROR);
                     return;
                 }
+                
                 trig_threshold = GetConfigParser()->GetFloat("/"+modadc+"/trig_threshold", 0.);
                 Print( "Internal threshold trigger mode will be used.\n", DEBUG);
             }
@@ -478,10 +481,17 @@ int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
     int32_t slope = trig_polarity ? DAQmx_Val_RisingSlope : DAQmx_Val_FallingSlope;
 
     if( trig_mode=="trig-ext"){
-        if( pre_trig_sample==0 )
+        
+        if( pre_trig_sample==0 ){
+            Print( "Configuring external trigger", DEBUG);
             return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), slope);
-        else
+        }
+        else{
+            stringstream ss;
+            ss << "Configuring external trigger with " << pre_trig_sample << " pre-trigger samples...\n";
+            Print( ss.str(), DEBUG);
             return DAQmxCfgDigEdgeRefTrig( task, trig_channel.c_str(), slope, pre_trig_sample);
+        }
     }
     else if( trig_mode=="threshold"){
         if( pre_trig_sample==0 )
