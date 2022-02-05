@@ -160,26 +160,36 @@ void NIdaq::Configure(){
     }
     // Finite mode, check if external trigger or internal software trigger
     else if( trig_mode=="trig-ext" || trig_mode=="trig-int" || trig_mode=="threshold" ){
+        
         nimode = DAQmx_Val_FiniteSamps;
+        
         // For ext mode or the threshold mode, need the trigger input channel.
         if( trig_mode=="trig-ext" || trig_mode=="threshold" ){
+            
             trig_channel = GetConfigParser()->GetString( "/"+modadc+"/trig_channel", "");
+            pre_trig_sample = GetConfigParser()->GetInt("/"+modadc+"/pre_trig_sample", 0);
+                // pre_trig_sample is common to both ext and threshold trigger
+            
             if( trig_channel=="" ){
                 Print( "Trigger channel not specified.\n", ERR);
                 SetStatus(ERROR);
                 return;
             }
+            
             trig_polarity = GetConfigParser()->GetBool("/"+modadc+"/trig_polarity", true);
                 // trigger polarity, true for rising edge, false for falling edge.
+            
             if( trig_mode=="threshold"){
+                
                 Print("Configuring trigger threshold and pre-trigger samples...\n", DEBUG);
+                
                 if( GetConfigParser()->Find("/"+modadc+"/trig_threshold")==false ){
                     Print( "Trigger threshold not specified.\n", ERR);
                     SetStatus(ERROR);
                     return;
                 }
+                
                 trig_threshold = GetConfigParser()->GetFloat("/"+modadc+"/trig_threshold", 0.);
-                pre_trig_sample = GetConfigParser()->GetInt("/"+modadc+"/pre_trig_sample", 0);
                 Print( "Internal threshold trigger mode will be used.\n", DEBUG);
             }
             else{
@@ -229,7 +239,7 @@ void NIdaq::Configure(){
     // ****************************************************
     // Configure trigger
     // ****************************************************
-    Print("Configuring HW trugger...\n", DETAIL);
+    Print("Configuring HW trigger...\n", DETAIL);
     error = ConfigTrigger( trig_mode, trig_channel );
     if( error < 0 ){
         stringstream ss;
@@ -466,15 +476,23 @@ int32 NIdaq::ConfigTrigger( string trig_mode, string trig_channel){
     if( trig_mode!= "trig-ext" && trig_mode!="threshold" )
         return 0;
 
-    Print( "Configuring trigger with "+trig_channel, DEBUG);
+    Print( "Trigger mode is "+trig_mode + "\n", DEBUG);
+    Print( "Configuring trigger with "+trig_channel + "\n", DEBUG);
 
     int32_t slope = trig_polarity ? DAQmx_Val_RisingSlope : DAQmx_Val_FallingSlope;
 
     if( trig_mode=="trig-ext"){
-        if( pre_trig_sample==0 )
+        
+        if( pre_trig_sample==0 ){
+            Print( "Configuring external trigger with no pre-trigger sample", DEBUG);
             return DAQmxCfgDigEdgeStartTrig( task, trig_channel.c_str(), slope);
-        else
+        }
+        else{
+            stringstream ss;
+            ss << "Configuring external trigger with " << pre_trig_sample << " pre-trigger samples...\n";
+            Print( ss.str(), DEBUG);
             return DAQmxCfgDigEdgeRefTrig( task, trig_channel.c_str(), slope, pre_trig_sample);
+        }
     }
     else if( trig_mode=="threshold"){
         if( pre_trig_sample==0 )
