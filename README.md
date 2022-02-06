@@ -10,7 +10,9 @@ Currently *nidaq* version is 1.0.0.
 + [NI-DAQmx](https://www.ni.com/en-us/support/documentation/supplemental/18/daqmx-for-desktop-linux-tools.html)
 + [H5CPP](http://h5cpp.org/)
 
-The polaris executable provides the main DAQ framework within which *nidaq* modules are invoked. NI-DAQmx libraries are required for configuring and reading data out from the ADC hardware. H5CPP libraries are needed to write data in HDF5 formats. Future versions might include modules that write data in other formats than HDF5 and thus HDF5 might not be mandatory. For installation of these programs, please see their webpages.
+The polaris executable provides the main DAQ framework within which *nidaq* modules are invoked. NI-DAQmx libraries are required for configuring and reading data out from the ADC hardware. NI-DAQmx library can be downloaded [here](https://www.ni.com/en-us/support/downloads/drivers/download.ni-daqmx.html#428058). After download, the repo can be installed with `yum install foo.rpm` and then ni-daqmx library can be installed by running `yum install ni-daqmx`. A list of packages in the repo can be found [here](https://www.ni.com/pdf/manuals/378353f.html).
+
+H5CPP libraries are needed to write data in HDF5 formats. Future versions might include modules that write data in other formats than HDF5 and thus HDF5 might not be mandatory. For installation of these programs, please see their webpages.
 
 
 ## Download, Compilation and Installation
