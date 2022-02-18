@@ -2,6 +2,8 @@
 
 *nidaq* is a Linux library of [polaris](https://github.com/suerfu/polaris) modules. These modules are loaded by the polaris executable at runtime and are designed to provide DAQ functionalities related to configuring and reading data from National Instruments analog-to-digital converter (ADC) cards and storing them in HDF5 format. *nidaq* runs only on Linux operating system. Currently, it is tested only on CentOS 8 with NI PCIe-6376. However, the library and its dependant libraries use general Linux libraries and can potentially run on other Linux distributions as well.
 
+NOTE: if this program is used in your experiment, please also cite the following work: Suerfu, B., 2018. Polaris: a general-purpose, modular data acquisition framework. Journal of Instrumentation, 13(12), p.T12004.
+
 Currently *nidaq* version is 1.0.0.
 
 ## Requirements
