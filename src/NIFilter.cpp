@@ -25,16 +25,27 @@ void NIFilter::Configure(){
     // =========================================================
     // Obtain ID/address of the module to which to send data to.
     // =========================================================
+
     next_addr = GetNextModuleID();
     prev_addr = GetPreviousModuleID();
     Print("Data path set.\n", DEBUG);
 
+
 	// =================================================================
-	// Get relevant parameters such as threshold, etc. from ConfigParser
+	// Get relevant parameters such as mode of operation, threshold, etc. from ConfigParser
 	// =================================================================
 	
-	// Example usage of config parser below:
-	// GetConfigParser()->GetString("/module/"+GetModuleName()+"/prev", "");
+	mode = GetConfigParser()->GetString("/module/"+GetModuleName()+"/mode", "");
+		// mode of operation. Continuous or triggered.
+		// different functions should be added here as functionality expands
+	if( mode=="" ){
+		Print("Mode not specified. Filter module will act as FIFO buffer.\n", INFO);
+	}
+	else if( mode=="scattering-hw-trigger" ){
+		trig_channel_indice = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels", "");
+		trig_threshold_float = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds", "");
+	}
+	
 
     // =========================================================
     // During config phase, DAQ will pass empty data for 
@@ -55,6 +66,12 @@ void NIFilter::Configure(){
     }
 	
 	// At this point, it is safe to assume no error ocurred during config phase.
+	// The calibration coefficient in the dummy data is used to back-compute threshold in ADC counts
+
+	
+
+	// Done with the dummy data. Pass it on to the next module.
+
 	PushToBuffer( next_addr, rdo);
     
     Print( this->GetModuleName()+" configured.\n", DEBUG);

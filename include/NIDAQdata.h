@@ -46,7 +46,7 @@ public:
     float GetClockFrequency(){ return clk;}
         //!< \return Clock frequency (sampling rate) in Hz.
 
-    vector<int> GetChannelIndex(){ return chan_index;}
+    vector<int> GetChannelIndices(){ return chan_indices;}
         //!< \return Vector of channel indices enabled for this data set.
 
     void SetVoltageRange( vector<float> min, vector<float> max){
@@ -124,7 +124,7 @@ public:
         cout << "Buffer per chan: " << buff_per_chan << endl;
         for( unsigned int i=0; i<nchan; i++){
             cout << "Channel " << i << endl;
-            cout << "\tChannel index: " << chan_index[i] << endl;
+            cout << "\tChannel index: " << chan_indices[i] << endl;
             cout << "\tVoltage range: " << vmin[i] << ' ' << vmax[i] << endl;
             cout << "\tcal coeff: " << cal_coeff[i][0] <<' '<< cal_coeff[i][0] <<' '<< cal_coeff[i][0] <<' '<< cal_coeff[i][0] << endl;
         }
@@ -168,7 +168,7 @@ private:
         //!< Calibration coefficients as contiguous block of data.
         //!< Needed for HDF5 output.
 
-    vector<int> chan_index;
+    vector<int> chan_indices;
         //!< Vector that holds Indices of channels enabled.
 
     vector<float> vmin;     //!< Minimum range of input voltages.

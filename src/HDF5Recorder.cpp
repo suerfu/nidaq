@@ -316,7 +316,7 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     Print( "Added nb_channels.\n", DEBUG);
     AddAttribute( "/"+group_name, "nb_samples", header->GetBufferPerChannel() );
     Print( "Added nb_samples.\n", DEBUG);
-    AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
+    AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndices() );
     Print( "Added adc_channel_indices.\n", DEBUG);
 
     AddAttribute( "/"+group_name, "data_mode", header->GetTrigMode() );
@@ -366,9 +366,9 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
     AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
     Print( "Added adc_conversion_factor.\n", DEBUG);
 
-    for( unsigned int i=0; i<header->GetChannelIndex().size(); i++ ){
+    for( unsigned int i=0; i<header->GetChannelIndices().size(); i++ ){
         stringstream ss;
-        ss << "connection" << header->GetChannelIndex()[i];
+        ss << "connection" << header->GetChannelIndices()[i];
         AddAttribute( "/"+group_name, ss.str(), GetConfigParser()->GetStrArray("/"+group_name+"/"+ss.str()) );
         Print( "Added " + ss.str() + "\n", DEBUG);
     }
@@ -384,12 +384,12 @@ void HDF5Recorder::ConfigureOutput( NIDAQdata* header ){
 
     h5man->OpenGroup( "/"+group_name );
 
-    AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndex() );
+    AddAttribute( "/"+group_name, "adc_channel_indices", header->GetChannelIndices() );
     AddAttribute( "/"+group_name, "adc_conversion_factor", foo, rank, dim );
 
-    for( unsigned int i=0; i<header->GetChannelIndex().size(); i++ ){
+    for( unsigned int i=0; i<header->GetChannelIndices().size(); i++ ){
         stringstream ss;
-        ss << "connection" << header->GetChannelIndex()[i];
+        ss << "connection" << header->GetChannelIndices()[i];
         AddAttribute( "/"+group_name, ss.str(), GetConfigParser()->GetStrArray("/"+group_name+"/"+ss.str()) );
         Print( "Added " + ss.str() + "\n", DEBUG);
     }
