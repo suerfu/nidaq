@@ -35,21 +35,21 @@ void NIFilter::Configure(){
 	// Get relevant parameters such as mode of operation, threshold, etc. from ConfigParser
 	// =================================================================
 	
-	mode = GetConfigParser()->GetString("/module/"+GetModuleName()+"/mode", "");
+	mode = GetConfigParser()->GetString("/module/"+GetModuleName()+"/mode", "all-pass");
 		// mode of operation. Continuous or triggered.
 		// different functions should be added here as functionality expands
-	if( mode=="" ){
-		Print("Mode not specified. Filter module will act as FIFO buffer.\n", INFO);
+	if( mode=="all-pass" ){
+		Print("Mode not specified. Filter module will act as an all-pass filter...\n", INFO);
 	}
 	else if( mode=="scattering-hw-trigger" ){
 		
-		trig_channel_indice = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
+		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
 		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
 		trig_polarity = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-polarity");
 		
 		// One should check validity of the specified parameters here!
 
-		trig_threshold_adc = trig_threshold_float;
+		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
 			// last statement is a simple initialization.
 	}
 	
@@ -84,7 +84,7 @@ void NIFilter::Configure(){
     NIDAQdata* header = reinterpret_cast<NIDAQdata*>(rdo);
 		// rdo is of type void*. First cast it to the correct type.
 
-	for( unsigned int i=0; i<trig_channel_indice.size(); i++){
+	for( unsigned int i=0; i<trig_channel_indices.size(); i++){
 		
 		int pos = header->GetChannelPosition( i );
 
@@ -133,8 +133,8 @@ void NIFilter::Run(){
     // Since the readout pointer is of type void*, first cast it to NIDAQdata type.
     NIDAQdata* data = reinterpret_cast< NIDAQdata* >(rdo);
 
-    dim[0] = data->GetNChannels();
-    dim[1] = data->GetBufferPerChannel();
+    //dim[0] = data->GetNChannels();
+    //dim[1] = data->GetBufferPerChannel();
 
 	bool pass = Filter( data );
 
@@ -187,8 +187,8 @@ int16 NIFilter::VoltToADC( float threshold_v, float64** cal, int pos ){
 	
 	float64 a0 = cal[pos][0];
 	float64 a1 = cal[pos][1];
-	float64 a2 = cal[pos][2];
-	float64 a3 = cal[pos][3];
+	//float64 a2 = cal[pos][2];
+	//float64 a3 = cal[pos][3];
 	
 	return (threshold_v-a0)/a1;
 		// using linear approximation
@@ -197,30 +197,39 @@ int16 NIFilter::VoltToADC( float threshold_v, float64** cal, int pos ){
 
 bool NIFilter::Filter( NIDAQdata* data ){
 
-	for( unsigned int chan = 0; chan < trig_channel_indice.size(); chan++){
+	for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
 		
-		int pos = data->GetChannelPositon( trig_channel_indice[chan] );
+		int pos = data->GetChannelPosition( trig_channel_indices[chan] );
 		
 		// loop over the given data to check for over or under threshold behavior
 		//
 
-		int buffer_size = data->GetBufferPerChannel();
+		unsigned int buffer_size = data->GetBufferPerChannel();
 			// buffer per channel
-		float64** buffer =  data->GetBuffer;
+
+		int16** buffer =  data->GetBuffer();
 			// actual memory holding the ADC values
 
 		// If positive polarity, look for over-threshold
 		if( trig_polarity[chan]>0 ){
 			for( unsigned int j=0; j<buffer_size; j++){
-				if( buffer[chan][j] > trig_threshold_adc[chan] )
+				if( buffer[pos][j] > trig_threshold_adc[chan] )
 					return true;
 			}
 		}
+        // Otherwise, do the opposite
+        //
 		else{
 			for( unsigned int j=0; j<buffer_size; j++){
-				if( buffer[chan][j] < trig_threshold_adc[chan] )
+				if( buffer[pos][j] < trig_threshold_adc[chan] )
 					return true;
 			}
 		}
 	}
+    
+    // The function will return true if trigger condition is met at any point.
+    // Reaching this line means no trigger was found.
+
+    return false;
+
 }

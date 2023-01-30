@@ -4,10 +4,10 @@
 
 NIDAQdata::NIDAQdata( const vector<int>& indices, unsigned int buffpc){
 
-    chan_index = indices;
+    chan_indices = indices;
 		// indicex of the enabled channels, not necessarily continuous in nature
 
-    nchan = chan_index.size();
+    nchan = chan_indices.size();
 		// total number of enabled channels
 
     buff_per_chan = buffpc;

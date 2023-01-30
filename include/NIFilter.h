@@ -42,6 +42,10 @@ private:
 
 private:
 
+    string mode;
+        // mode of trigger
+        // CONTINUOUS, OR, AND, etc.
+
     int next_addr;
     
 	int prev_addr;
@@ -51,6 +55,28 @@ private:
         //!< If not specified, it returns the module's own address.
     
 	int GetPreviousModuleID();
+        //!< Retrieves the ID/address of the previous module.
+        //!< This is necessary when the data fails the filter and needs to be returned to the DAQ module for reuse.
+
+    int16** buffer;
+
+    vector<int> trig_channel_indices;
+        // channels to consider in making online trigger decisions.
+
+    vector<float> trig_threshold_v;
+        // trigger threshold in actual voltage
+
+    vector<int16> trig_threshold_adc;
+        // trigger threshold in ADC counts
+    
+    vector<int> trig_polarity;
+        // true if trigger over threshold
+        // false if trigger under threshold
+
+    int16 VoltToADC( float threshold, float64** cal_coeff, int position) ;
+
+    bool Filter( NIDAQdata* data);
+
 };
 
 extern "C" NIFilter* create_NIFilter( plrsController* c);

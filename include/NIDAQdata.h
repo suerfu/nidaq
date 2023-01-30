@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <NIDAQmx.h>
+#include <algorithm>
 
 using std::cout;
 using std::endl;
@@ -49,9 +50,9 @@ public:
     vector<int> GetChannelIndices(){ return chan_indices;}
         //!< \return Vector of channel indices enabled for this data set.
 
-	int GetChannelPositon( int chan ){
+	int GetChannelPosition( int chan ){
 
-		vector<int>::iterator itr = chan_indices.find(chan);
+		vector<int>::iterator itr = std::find( chan_indices.begin(), chan_indices.end(), chan );
 		
 		if( itr!=chan_indices.end() ){
 			return itr-chan_indices.begin();
