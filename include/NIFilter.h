@@ -1,5 +1,5 @@
-#ifndef NIDAQFILTER_HHDF5RECORDER_H
-    #define NIDAQFILTER_H 1
+#ifndef NIFILTER_HHDF5RECORDER_H
+    #define NIFILTER_H 1
 
 #include <string>
 #include <sstream>
@@ -17,13 +17,13 @@ using namespace std;
 /// so that events failing the filter will be returned back to the DAQ module
 
 
-class NIDAQFilter : public plrsStateMachine{
+class NIFilter : public plrsStateMachine{
 
 public:
 
-    NIDAQFilter( plrsController* c);    //!< Constructor.
+    NIFilter( plrsController* c);    //!< Constructor.
 
-    virtual ~NIDAQFilter();  //!< Destructor
+    virtual ~NIFilter();  //!< Destructor
 
 private:
 
@@ -53,9 +53,9 @@ private:
 	int GetPreviousModuleID();
 };
 
-extern "C" NIDAQFilter* create_NIDAQFilter( plrsController* c);
+extern "C" NIFilter* create_NIFilter( plrsController* c);
 
-extern "C" void destroy_NIDAQFilter( NIDAQFilter* p );
+extern "C" void destroy_NIFilter( NIFilter* p );
 
 
 #endif

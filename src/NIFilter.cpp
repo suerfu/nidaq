@@ -1,24 +1,24 @@
 
 #include "plrsBaseData.h"
 
-#include "NIDAQFilter.h"
+#include "NIFilter.h"
 
 
-extern "C" NIDAQFilter* create_NIDAQFilter( plrsController* c ){ return new NIDAQFilter(c);}
+extern "C" NIFilter* create_NIFilter( plrsController* c ){ return new NIFilter(c);}
 
-extern "C" void destroy_NIDAQFilter( NIDAQFilter* p ){ delete p;}
+extern "C" void destroy_NIFilter( NIFilter* p ){ delete p;}
 
 
-NIDAQFilter::NIDAQFilter( plrsController* c) : plrsStateMachine(c){ }
+NIFilter::NIFilter( plrsController* c) : plrsStateMachine(c){ }
 	// Not too much to be done in the constructor
 
 
 
-NIDAQFilter::~NIDAQFilter(){}
+NIFilter::~NIFilter(){}
 
 
 
-void NIDAQFilter::Configure(){
+void NIFilter::Configure(){
 
     Print("configuring...\n", DEBUG);
     
@@ -62,17 +62,17 @@ void NIDAQFilter::Configure(){
 
 
 
-void NIDAQFilter::Deconfigure(){}
+void NIFilter::Deconfigure(){}
 
 
-void NIDAQFilter::PreRun(){}
+void NIFilter::PreRun(){}
 
 
-void NIDAQFilter::PostRun(){
+void NIFilter::PostRun(){
 }
 
 
-void NIDAQFilter::Run(){
+void NIFilter::Run(){
 
     // Obtain a valid/ready pointer to data object from circular FIFO buffer.
     void* rdo = PullFromBuffer();
@@ -106,7 +106,7 @@ void NIDAQFilter::Run(){
 }
 
 
-int NIDAQFilter::GetNextModuleID(){
+int NIFilter::GetNextModuleID(){
 
     int next_addr;
 
@@ -124,7 +124,7 @@ int NIDAQFilter::GetNextModuleID(){
 }
 
 
-int NIDAQFilter::GetPreviousModuleID(){
+int NIFilter::GetPreviousModuleID(){
 
     int prev_addr;
 
