@@ -49,6 +49,22 @@ public:
     vector<int> GetChannelIndices(){ return chan_indices;}
         //!< \return Vector of channel indices enabled for this data set.
 
+	int GetChannelPositon( int chan ){
+
+		vector<int>::iterator itr = chan_indices.find(chan);
+		
+		if( itr!=chan_indices.end() ){
+			return itr-chan_indices.begin();
+		}
+		else{
+			return -1;
+		}
+	}
+		//!< \return Position/order of the given channel index in the indices array.
+		//!< Useful for accessing corresponding channels in the actual memory array.
+		//!< Returns -1 if specified channel is not found.
+	
+
     void SetVoltageRange( vector<float> min, vector<float> max){
         vmin = min;   vmax = max;
     }
@@ -158,12 +174,14 @@ private:
 
     int16** buffer_mat;
         //!< Pointer to buffer. Used for accessing elements using matrix convention.
+
     int16* buffer_mem;
         //!< Pointer to buffer as contiguous block of data.
         //!< Needed for writing HDF5 output.
 
     float64** cal_coeff_mat;
         //!< Calibration coefficients for access as matrix.
+
     float64* cal_coeff_mem;
         //!< Calibration coefficients as contiguous block of data.
         //!< Needed for HDF5 output.

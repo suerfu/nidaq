@@ -42,8 +42,15 @@ void NIFilter::Configure(){
 		Print("Mode not specified. Filter module will act as FIFO buffer.\n", INFO);
 	}
 	else if( mode=="scattering-hw-trigger" ){
-		trig_channel_indice = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels", "");
-		trig_threshold_float = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds", "");
+		
+		trig_channel_indice = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
+		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
+		trig_polarity = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-polarity");
+		
+		// One should check validity of the specified parameters here!
+
+		trig_threshold_adc = trig_threshold_float;
+			// last statement is a simple initialization.
 	}
 	
 
@@ -68,6 +75,27 @@ void NIFilter::Configure(){
 	// At this point, it is safe to assume no error ocurred during config phase.
 	// The calibration coefficient in the dummy data is used to back-compute threshold in ADC counts
 
+	// Suerfu on 1/30/2023
+	// To get ADC counts from volt/float, one has to invert a 3-rd order polynomial since volt = a0+a1*x+a2*x^2+a3*x^3
+	// where a0-3 are calibration coefficients obtained from the hardware.
+	// At this moment we will first use only first two terms (linear approximation) of the calibration coefficients.
+	// The error introduced is on the order of 100 mV at maximum based on previous tests.
+
+    NIDAQdata* header = reinterpret_cast<NIDAQdata*>(rdo);
+		// rdo is of type void*. First cast it to the correct type.
+
+	for( unsigned int i=0; i<trig_channel_indice.size(); i++){
+		
+		int pos = header->GetChannelPosition( i );
+
+		if( pos<0 ){
+			Print("Online trigger channel is not enabled.", ERR);
+			SetStatus(ERROR);
+			return;
+		}
+
+		trig_threshold_adc[i] = VoltToADC( trig_threshold_v[i], header->GetCalCoeff(), pos );
+	}
 	
 
 	// Done with the dummy data. Pass it on to the next module.
@@ -108,18 +136,14 @@ void NIFilter::Run(){
     dim[0] = data->GetNChannels();
     dim[1] = data->GetBufferPerChannel();
 
-	if( /*if data passes filter*/ ){
+	bool pass = Filter( data );
+
+	if( pass==true ){
 		PushToBuffer( next_addr, rdo);
 	}
-	else if( /*did not pass, but no error*/ ){
+	else{
 		PushToBuffer( prev_addr, rdo);
 	}
-	else{
-        Print( "Encountered error.\n", ERR);
-	    PushToBuffer( next_addr, rdo);
-        SetStatus(ERROR);
-        return;
-    }
 }
 
 
@@ -159,3 +183,44 @@ int NIFilter::GetPreviousModuleID(){
 }
 
 
+int16 NIFilter::VoltToADC( float threshold_v, float64** cal, int pos ){
+	
+	float64 a0 = cal[pos][0];
+	float64 a1 = cal[pos][1];
+	float64 a2 = cal[pos][2];
+	float64 a3 = cal[pos][3];
+	
+	return (threshold_v-a0)/a1;
+		// using linear approximation
+}
+
+
+bool NIFilter::Filter( NIDAQdata* data ){
+
+	for( unsigned int chan = 0; chan < trig_channel_indice.size(); chan++){
+		
+		int pos = data->GetChannelPositon( trig_channel_indice[chan] );
+		
+		// loop over the given data to check for over or under threshold behavior
+		//
+
+		int buffer_size = data->GetBufferPerChannel();
+			// buffer per channel
+		float64** buffer =  data->GetBuffer;
+			// actual memory holding the ADC values
+
+		// If positive polarity, look for over-threshold
+		if( trig_polarity[chan]>0 ){
+			for( unsigned int j=0; j<buffer_size; j++){
+				if( buffer[chan][j] > trig_threshold_adc[chan] )
+					return true;
+			}
+		}
+		else{
+			for( unsigned int j=0; j<buffer_size; j++){
+				if( buffer[chan][j] < trig_threshold_adc[chan] )
+					return true;
+			}
+		}
+	}
+}
