@@ -39,7 +39,7 @@ void NIFilter::Configure(){
 		// mode of operation. Continuous or triggered.
 		// different functions should be added here as functionality expands
 	if( mode=="all-pass" ){
-		Print("Mode not specified. Filter module will act as an all-pass filter...\n", INFO);
+		Print( "Filter module will act as an all-pass filter...\n", INFO );
 	}
 	else if( mode=="scattering-hw-trigger" ){
 		
@@ -136,7 +136,7 @@ void NIFilter::Run(){
     //dim[0] = data->GetNChannels();
     //dim[1] = data->GetBufferPerChannel();
 
-	bool pass = Filter( data );
+	bool pass = Filter( data, mode );
 
 	if( pass==true ){
 		PushToBuffer( next_addr, rdo);
@@ -195,7 +195,11 @@ int16 NIFilter::VoltToADC( float threshold_v, float64** cal, int pos ){
 }
 
 
-bool NIFilter::Filter( NIDAQdata* data ){
+bool NIFilter::Filter( NIDAQdata* data, string mode ){
+
+    if( mode=="all-pass" ){
+        return true;
+    }
 
 	for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
 		

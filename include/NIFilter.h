@@ -75,7 +75,7 @@ private:
 
     int16 VoltToADC( float threshold, float64** cal_coeff, int position) ;
 
-    bool Filter( NIDAQdata* data);
+    bool Filter( NIDAQdata* data, string mode);
 
 };
 
