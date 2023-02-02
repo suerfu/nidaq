@@ -5,6 +5,7 @@ CC = g++
 NAME = nidaq
 LIBNAME = lib$(NAME).so
 
+PREFIX = /usr
 
 CPP_FILES = $(wildcard src/*.cpp h5manager/src/*.cpp) 
 OBJ_FILES = $(patsubst %.cpp, %.o, $(CPP_FILES))
@@ -57,6 +58,15 @@ lib : ./lib/$(LIBNAME)
 %.o : %.cpp
 	@echo "compiling $@"
 	@$(CC) $(CFLAGS) -c $^ -o $@
+
+install:
+	@echo "installing..."
+	@mkdir -p ${PREFIX}/include/$(NAME)
+	@cp ./include/*.h ${PREFIX}/include/$(NAME)
+	@cp ./lib/$(LIBNAME) ${PREFIX}/lib/
+	@ln -sf ${PREFIX}/lib/${LIBNAME} ${PREFIX}/lib/lib${NAME}.so.${SOMAJOR}
+	@ln -sf ${PREFIX}/lib/lib${NAME}.so.${SOMAJOR} ${PREFIX}/lib/lib${NAME}.so
+	@sudo ldconfig -n ${PREFIX}/lib/lib${NAME}.so
 
 clean:
 	@echo "cleaning..."
