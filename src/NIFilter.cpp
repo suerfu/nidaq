@@ -52,6 +52,17 @@ void NIFilter::Configure(){
 		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
 			// last statement is a simple initialization.
 	}
+	else if( mode=="scattering-Amp-trigger" ){
+		
+		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
+		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
+		trig_polarity = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-polarity");
+		
+		// One should check validity of the specified parameters here!
+
+		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
+			// last statement is a simple initialization.
+	}
 	
 
     // =========================================================
@@ -215,19 +226,38 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
 			// actual memory holding the ADC values
 
 		// If positive polarity, look for over-threshold
-		if( trig_polarity[chan]>0 ){
-			for( unsigned int j=0; j<buffer_size; j++){
-				if( buffer[pos][j] > trig_threshold_adc[chan] )
-					return true;
+		if (mode=="scattering-hw-trigger"){
+			if( trig_polarity[chan]>0 ){
+				for( unsigned int j=0; j<buffer_size; j++){
+					if( buffer[pos][j] > trig_threshold_adc[chan] )
+						return true;
+				}
+			}
+			// Otherwise, do the opposite
+			//
+		else{
+				for( unsigned int j=0; j<buffer_size; j++){
+					if( buffer[pos][j] < trig_threshold_adc[chan] )
+						return true;
+				}
 			}
 		}
-        // Otherwise, do the opposite
-        //
-		else{
-			for( unsigned int j=0; j<buffer_size; j++){
-				if( buffer[pos][j] < trig_threshold_adc[chan] )
+		if (mode=="scattering-Amp-trigger"){
+			if( trig_polarity[chan]>0 ){
+				int max = *max_element(buffer[pos].begin(), buffer[pos].end())
+				int min = *min_element(buffer[pos].begin(), buffer[pos].end())
+				if ((buffer[pos][max] - buffer[pos][min]) > trig_threshold_adc[chan]){
 					return true;
+				}
 			}
+			else{
+				int max = *max_element(buffer[pos].begin(), buffer[pos].end())
+				int min = *min_element(buffer[pos].begin(), buffer[pos].end())
+				if ((buffer[pos][max] - buffer[pos][min]) < trig_threshold_adc[chan]){
+					return true;
+				}
+			}
+
 		}
 	}
     
