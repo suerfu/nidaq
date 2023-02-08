@@ -52,7 +52,7 @@ void NIFilter::Configure(){
 		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
 			// last statement is a simple initialization.
 	}
-	else if( mode=="scattering-Amp-trigger" ){
+	else if( mode=="scattering-amp-trigger" ){
 		
 		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
 		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
@@ -212,58 +212,79 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
         return true;
     }
 
-	for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
+    // Depending on the modes, do different behaviors.
+    //
+	unsigned int buffer_size = data->GetBufferPerChannel();
+		// buffer per channel
+
+    if (mode == "fixed-threshold-filter"){
+
+        for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
 		
-		int pos = data->GetChannelPosition( trig_channel_indices[chan] );
-		
-		// loop over the given data to check for over or under threshold behavior
-		//
+		    int pos = data->GetChannelPosition( trig_channel_indices[chan] );
+                // Pos is the position (array index) of the specified channel
+                // Not the index on the ADC channel.
+		    
+            // loop over the given data to check for over or under threshold behavior
+		    //
+		    int16** buffer =  data->GetBuffer();
+			    // actual memory holding the ADC values
 
-		unsigned int buffer_size = data->GetBufferPerChannel();
-			// buffer per channel
+            // If positive polarity, look for over-threshold
+            if( trig_polarity[chan]>0 ){
+                for( unsigned int j=0; j<buffer_size; j++){
+                    if( buffer[pos][j] > trig_threshold_adc[chan] ){
+                        return true;
+                    }
+                }
+            }
+            // Otherwise, do the opposite
+            //
+            else{
+                for( unsigned int j=0; j<buffer_size; j++){
+                    if( buffer[pos][j] < trig_threshold_adc[chan] ){
+                        return true;
+                    }
+                }
+            }
+        }
 
-		int16** buffer =  data->GetBuffer();
-			// actual memory holding the ADC values
+        return false;
+    }
+	else if ( mode == "moving-threshold-filter" ){
+        
+        
+        // If it's moving threshold filter, find min and max of data and get the difference
+        // Above is only a crude approximation.
+        //
+        for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
+		    
+            int pos = data->GetChannelPosition( trig_channel_indices[chan] );
+            
+            if( trig_polarity[chan]>0 ){
 
-		// If positive polarity, look for over-threshold
-		if (mode=="scattering-hw-trigger"){
-			if( trig_polarity[chan]>0 ){
-				for( unsigned int j=0; j<buffer_size; j++){
-					if( buffer[pos][j] > trig_threshold_adc[chan] )
-						return true;
-				}
-			}
-			// Otherwise, do the opposite
-			//
-		else{
-				for( unsigned int j=0; j<buffer_size; j++){
-					if( buffer[pos][j] < trig_threshold_adc[chan] )
-						return true;
-				}
-			}
-		}
-		if (mode=="scattering-Amp-trigger"){
-			if( trig_polarity[chan]>0 ){
-				int max = *max_element(buffer[pos].begin(), buffer[pos].end())
-				int min = *min_element(buffer[pos].begin(), buffer[pos].end())
-				if ((buffer[pos][max] - buffer[pos][min]) > trig_threshold_adc[chan]){
+			    int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+			    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+				
+                if ( (buffer[pos][max] - buffer[pos][min]) > trig_threshold_adc[chan]){
 					return true;
 				}
 			}
 			else{
-				int max = *max_element(buffer[pos].begin(), buffer[pos].end())
-				int min = *min_element(buffer[pos].begin(), buffer[pos].end())
-				if ((buffer[pos][max] - buffer[pos][min]) < trig_threshold_adc[chan]){
+
+				int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+				int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+				
+                if ((buffer[pos][max] - buffer[pos][min]) < trig_threshold_adc[chan]){
 					return true;
 				}
 			}
-
 		}
+        return false;
 	}
     
-    // The function will return true if trigger condition is met at any point.
-    // Reaching this line means no trigger was found.
-
-    return false;
-
+    // If this line is reached, specified mode is not implemented.
+    // Return true to prevent data loss.
+    // 
+    return true;
 }
