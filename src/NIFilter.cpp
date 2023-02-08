@@ -9,8 +9,11 @@ extern "C" NIFilter* create_NIFilter( plrsController* c ){ return new NIFilter(c
 extern "C" void destroy_NIFilter( NIFilter* p ){ delete p;}
 
 
-NIFilter::NIFilter( plrsController* c) : plrsStateMachine(c){ }
-	// Not too much to be done in the constructor
+NIFilter::NIFilter( plrsController* c) : plrsStateMachine(c){
+
+    post_filter_event_counter = 0;
+    nb_post_filter_events = 0;
+}
 
 
 
@@ -41,7 +44,7 @@ void NIFilter::Configure(){
 	if( mode=="all-pass" ){
 		Print( "Filter module will act as an all-pass filter...\n", INFO );
 	}
-	else if( mode=="scattering-hw-trigger" ){
+	else if( mode=="fixed-threshold-filter" || mode=="moving-threshold-filter" ){
 		
 		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
 		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
@@ -51,19 +54,14 @@ void NIFilter::Configure(){
 
 		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
 			// last statement is a simple initialization.
-	}
-	else if( mode=="scattering-amp-trigger" ){
-		
-		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
-		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
-		trig_polarity = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-polarity");
-		
-		// One should check validity of the specified parameters here!
 
-		trig_threshold_adc = vector<int16>( trig_threshold_v.size() );
-			// last statement is a simple initialization.
 	}
-	
+
+    // Nb of extra events to record after one event passes the filer
+    // By default, it is 0:
+    // This parameter is common to many different modes.
+    //
+    nb_post_filter_events = GetConfigParser()->GetInt("/module/"+GetModuleName()+"/post_filter_events", 0);
 
     // =========================================================
     // During config phase, DAQ will pass empty data for 
@@ -208,7 +206,11 @@ int16 NIFilter::VoltToADC( float threshold_v, float64** cal, int pos ){
 
 bool NIFilter::Filter( NIDAQdata* data, string mode ){
 
-    if( mode=="all-pass" ){
+    if ( mode=="all-pass" ){
+        return true;
+    }
+    else if ( post_filter_event_counter!=0 ){
+        post_filter_event_counter--;
         return true;
     }
 
@@ -234,6 +236,7 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
             if( trig_polarity[chan]>0 ){
                 for( unsigned int j=0; j<buffer_size; j++){
                     if( buffer[pos][j] > trig_threshold_adc[chan] ){
+                        post_filter_event_counter = nb_post_filter_events;
                         return true;
                     }
                 }
@@ -243,6 +246,7 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
             else{
                 for( unsigned int j=0; j<buffer_size; j++){
                     if( buffer[pos][j] < trig_threshold_adc[chan] ){
+                        post_filter_event_counter = nb_post_filter_events;
                         return true;
                     }
                 }
@@ -267,6 +271,7 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
 			    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
 				
                 if ( (buffer[pos][max] - buffer[pos][min]) > trig_threshold_adc[chan]){
+                    post_filter_event_counter = nb_post_filter_events;
 					return true;
 				}
 			}
@@ -276,6 +281,7 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
 				int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
 				
                 if ((buffer[pos][max] - buffer[pos][min]) < trig_threshold_adc[chan]){
+                    post_filter_event_counter = nb_post_filter_events;
 					return true;
 				}
 			}

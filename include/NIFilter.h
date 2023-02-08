@@ -47,8 +47,19 @@ private:
         // CONTINUOUS, OR, AND, etc.
 
     int next_addr;
+        // address to send data to
+        // usually this is the recorder
     
 	int prev_addr;
+        // address to return data to
+        // usually this is the DAQ module
+
+    unsigned int nb_post_filter_events;
+        // Nb of events to record after an event passes the filter
+        // For completeness of the pulse.
+
+    unsigned int post_filter_event_counter;
+        // Used to record how many extra post-filter events to record.
 
     int GetNextModuleID();
         //!< Retrieves the ID/address of next module.
