@@ -112,7 +112,7 @@ void NIdaq::Configure(){
 
     // if no value is specified, report error.
     if( Vmin.size()!=channels.size() || Vmax.size()!=channels.size() ){
-        Print("The number of Vmin/Vmax is different fromchannels enabled.\n", ERR);
+        Print("The number of Vmin/Vmax is different from channels enabled.\n", ERR);
         SetStatus(ERROR);
         return;
     }

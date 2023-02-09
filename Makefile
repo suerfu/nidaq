@@ -3,7 +3,11 @@
 CC = g++ 
 
 NAME = nidaq
-LIBNAME = lib$(NAME).so
+
+SOMAJOR = 1
+SOMINOR = 1
+
+LIBNAME = lib$(NAME).so.${SOMAJOR}.${SOMINOR}
 
 PREFIX = /usr
 

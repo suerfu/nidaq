@@ -45,7 +45,12 @@ void NIFilter::Configure(){
 		Print( "Filter module will act as an all-pass filter...\n", INFO );
 	}
 	else if( mode=="fixed-threshold-filter" || mode=="moving-threshold-filter" ){
-		
+	    
+        if( mode=="fixed-threshold-filter" )
+            Print("Filter module in fixed threshold mode.\n", INFO );
+        else
+            Print("Filter module in moving threshold mode.\n", INFO );
+
 		trig_channel_indices = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-channels");
 		trig_threshold_v = GetConfigParser()->GetFloatArray("/module/"+GetModuleName()+"/filter-thresholds");
 		trig_polarity = GetConfigParser()->GetIntArray("/module/"+GetModuleName()+"/filter-polarity");
@@ -98,7 +103,7 @@ void NIFilter::Configure(){
 		int pos = header->GetChannelPosition( i );
 
 		if( pos<0 ){
-			Print("Online trigger channel is not enabled.", ERR);
+			Print("Online trigger channel is not enabled.\n", ERR);
 			SetStatus(ERROR);
 			return;
 		}
@@ -252,9 +257,9 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
                 }
             }
         }
-
         return false;
     }
+
 	else if ( mode == "moving-threshold-filter" ){
         
         
@@ -265,25 +270,13 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
 		    
             int pos = data->GetChannelPosition( trig_channel_indices[chan] );
             
-            if( trig_polarity[chan]>0 ){
+			int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+		    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
+                // Above two lines are causing seg faults. Need to be fixed.
 
-			    int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-			    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-				
-                if ( (buffer[pos][max] - buffer[pos][min]) > trig_threshold_adc[chan]){
-                    post_filter_event_counter = nb_post_filter_events;
-					return true;
-				}
-			}
-			else{
-
-				int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-				int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-				
-                if ((buffer[pos][max] - buffer[pos][min]) < trig_threshold_adc[chan]){
-                    post_filter_event_counter = nb_post_filter_events;
-					return true;
-				}
+            if ( max - min > trig_threshold_adc[chan] ){
+                post_filter_event_counter = nb_post_filter_events;
+				return true;
 			}
 		}
         return false;
