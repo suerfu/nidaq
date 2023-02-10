@@ -269,16 +269,17 @@ bool NIFilter::Filter( NIDAQdata* data, string mode ){
         for( unsigned int chan = 0; chan < trig_channel_indices.size(); chan++){
 		    
             int pos = data->GetChannelPosition( trig_channel_indices[chan] );
-            
-			int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-		    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size-1]);
-                // Above two lines are causing seg faults. Need to be fixed.
+            int16** buffer =  data->GetBuffer();
 
+			int16 max = *std::max_element( &buffer[pos][0], &buffer[pos][buffer_size -1]);
+		    int16 min = *std::min_element( &buffer[pos][0], &buffer[pos][buffer_size -1]);
             if ( max - min > trig_threshold_adc[chan] ){
                 post_filter_event_counter = nb_post_filter_events;
 				return true;
-			}
+			} 
+            
 		}
+        
         return false;
 	}
     
